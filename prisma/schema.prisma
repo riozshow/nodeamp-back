@@ -1,0 +1,503 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions", "views"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [citext]
+}
+
+model password {
+  id             String @id @default(uuid()) @db.Uuid
+  hashedPassword String
+  userId         String @unique @db.Uuid
+  user           user   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model session {
+  id        String   @id
+  sid       String   @unique
+  data      String
+  expiresAt DateTime
+}
+
+model user {
+  id       String    @id @default(uuid()) @db.Uuid
+  name     String    @unique
+  password password?
+
+  profileHubId String? @unique @db.Uuid
+  profileHub   hub?    @relation(name: "profile_hub", fields: [profileHubId], references: [id])
+
+  label      user_label?
+  storage    storage?
+  hubs       hub[]
+  feeders    feeder[]
+  rates      share_rate[]
+  contents   content[]
+  posts      post[]
+  hubsGroups hub_user_group_member[]
+  images     user_image[]
+  likes      share_like[]
+  comments   share_comment[]
+  shares     share[]
+}
+
+model user_label {
+  title       String?
+  description String?
+
+  user   user   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @unique @db.Uuid
+}
+
+model user_image {
+  size Int
+  data Bytes
+
+  user   user   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @db.Uuid
+
+  @@id([userId, size])
+}
+
+model node {
+  id String @id @default(uuid()) @db.Uuid
+
+  type String
+  name String
+
+  hubId String @db.Uuid
+  hub   hub    @relation(fields: [hubId], references: [id], onDelete: Cascade)
+
+  feederInput  feeder? @relation("input_node")
+  feederOutput feeder? @relation("output_node")
+
+  shares share[]
+  rates  share_rate[]
+
+  position    node_position?
+  permissions node_permissions?
+
+  targetNodes node_connections[] @relation(name: "source_node")
+  sourceNodes node_connections[] @relation(name: "target_node")
+}
+
+model node_permissions {
+  nodeId String @unique @db.Uuid
+  node   node   @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  data Json
+}
+
+model node_connections {
+  sourceNodeId String @unique @db.Uuid
+  sourceNode   node   @relation(name: "source_node", fields: [sourceNodeId], references: [id], onDelete: Cascade)
+
+  targetNodeId String @unique @db.Uuid
+  targetNode   node   @relation(name: "target_node", fields: [targetNodeId], references: [id], onDelete: Cascade)
+
+  requirements Json
+}
+
+model node_position {
+  x      Int
+  y      Int
+  nodeId String @unique @db.Uuid
+  node   node   @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+}
+
+model feeder {
+  id String @unique @default(uuid()) @db.Uuid
+
+  name  String
+  label label_feeder?
+
+  userId String @db.Uuid
+  user   user   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  inputNodeId  String @unique @db.Uuid
+  outputNodeId String @unique @db.Uuid
+
+  inputNode  node @relation(name: "input_node", fields: [inputNodeId], references: [id], onDelete: Cascade)
+  outputNode node @relation(name: "output_node", fields: [outputNodeId], references: [id], onDelete: Cascade)
+
+  hub   hub    @relation(fields: [hubId], references: [id], onDelete: Cascade)
+  hubId String @db.Uuid
+
+  connectedHubs hub_external_feeders[]
+  hubsGroups    hub_feeder_group_member[]
+  stats         feeder_stats?
+  tags          feeder_tag[]
+
+  createdPosts post[]
+}
+
+model feeder_tag {
+  feeder feeder @relation(fields: [feederId], references: [id], onDelete: Cascade)
+  tag    tag    @relation(fields: [name], references: [name], onDelete: Cascade)
+
+  feederId String @db.Uuid
+  name     String
+  count    Int
+
+  @@unique([feederId, name])
+}
+
+model feeder_stats {
+  feeder   feeder @relation(fields: [feederId], references: [id], onDelete: Cascade)
+  feederId String @unique @db.Uuid
+
+  postsCount Int
+}
+
+model label_feeder {
+  description String?
+
+  feeder   feeder @relation(fields: [feederId], references: [id], onDelete: Cascade)
+  feederId String @unique @db.Uuid
+}
+
+model hub {
+  id String @id @default(uuid()) @db.Uuid
+
+  name String
+
+  defaultFeederId String? @db.Uuid
+
+  label hub_label?
+
+  user   user   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @db.Uuid
+
+  profile user? @relation(name: "profile_hub")
+
+  usersGroups   hub_user_group[]
+  feedersGroups hub_feeder_group[]
+
+  localFeeders    feeder[]
+  externalFeeders hub_external_feeders[]
+
+  nodes  node[]
+  images hub_image[]
+}
+
+model hub_external_feeders {
+  hub    hub    @relation(fields: [hubId], references: [id])
+  feeder feeder @relation(fields: [feederId], references: [id])
+
+  hubId    String @db.Uuid
+  feederId String @db.Uuid
+
+  @@unique([hubId, feederId])
+}
+
+model hub_image {
+  size Int
+  data Bytes
+
+  hub   hub    @relation(fields: [hubId], references: [id], onDelete: Cascade)
+  hubId String @db.Uuid
+
+  @@id([hubId, size])
+}
+
+model hub_label {
+  hub   hub    @relation(fields: [hubId], references: [id], onDelete: Cascade)
+  hubId String @unique @db.Uuid
+}
+
+model hub_user_group {
+  id    String @id @default(uuid()) @db.Uuid
+  hub   hub    @relation(fields: [hubId], references: [id], onDelete: Cascade)
+  hubId String @db.Uuid
+
+  isUserDefined Boolean @default(true)
+
+  name  String
+  users hub_user_group_member[]
+
+  @@unique([hubId, name])
+}
+
+model hub_user_group_member {
+  group   hub_user_group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId String         @db.Uuid
+
+  user   user   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @db.Uuid
+
+  @@id([groupId, userId])
+}
+
+model hub_feeder_group {
+  id String @id @default(uuid()) @db.Uuid
+
+  hub   hub    @relation(fields: [hubId], references: [id], onDelete: Cascade)
+  hubId String @db.Uuid
+
+  name    String
+  feeders hub_feeder_group_member[]
+
+  @@unique([hubId, name])
+}
+
+model hub_feeder_group_member {
+  group   hub_feeder_group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId String           @db.Uuid
+
+  feeder   feeder @relation(fields: [feederId], references: [id], onDelete: Cascade)
+  feederId String @db.Uuid
+
+  @@unique([feederId, groupId])
+}
+
+model post {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @db.Uuid
+  user   user   @relation(fields: [userId], references: [id])
+
+  creatorFeederId String @db.Uuid
+  creatorFeeder   feeder @relation(fields: [creatorFeederId], references: [id])
+
+  contentId String?  @db.Uuid
+  content   content? @relation(fields: [contentId], references: [id])
+
+  shares share[]
+
+  interactions post_interactions?
+
+  createdAt DateTime?
+}
+
+model post_interactions {
+  postId String @unique @db.Uuid
+  post   post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  plays    Int? @default(0)
+  likes    Int? @default(0)
+  comments Int? @default(0)
+  rates    Int? @default(0)
+  shares   Int? @default(0)
+}
+
+model share {
+  id String @id @default(uuid()) @db.Uuid
+
+  user   user   @relation(fields: [userId], references: [id])
+  userId String @db.Uuid
+
+  post   post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId String @db.Uuid
+
+  node   node   @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  nodeId String @db.Uuid
+
+  message String?
+
+  likes    share_like[]
+  comments share_comment[]
+  rates    share_rate[]
+
+  updatedAt  DateTime?
+  acceptedAt DateTime?
+
+  @@unique([postId, nodeId])
+}
+
+model share_rate {
+  rate Int
+
+  userId String @db.Uuid
+  user   user   @relation(fields: [userId], references: [id])
+
+  shareId String @db.Uuid
+  share   share  @relation(fields: [shareId], references: [id], onDelete: Cascade)
+
+  nodeId String @db.Uuid
+  node   node   @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@unique([shareId, userId, nodeId])
+}
+
+model share_like {
+  userId String @db.Uuid
+  user   user   @relation(fields: [userId], references: [id])
+
+  shareId String @db.Uuid
+  share   share  @relation(fields: [shareId], references: [id], onDelete: Cascade)
+
+  @@unique([shareId, userId])
+}
+
+model share_comment {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @db.Uuid
+  user   user   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  shareId String @db.Uuid
+  share   share  @relation(fields: [shareId], references: [id], onDelete: Cascade)
+
+  time Int?   @default(0)
+  text String
+}
+
+model storage {
+  userId String @unique @db.Uuid
+  user   user   @relation(fields: [userId], references: [id])
+
+  locations location[]
+  stats     storage_stats?
+  files     file[]
+}
+
+model storage_stats {
+  storage storage @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  userId  String  @unique @db.Uuid
+
+  capacity Int
+  used     Int
+}
+
+model location {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId  String?  @db.Uuid
+  storage storage? @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  path String @db.Citext
+
+  label    location_label?
+  contents content[]
+
+  @@unique([userId, path])
+}
+
+model location_label {
+  description String
+  color       String
+  icon        String
+
+  locationId String   @unique @db.Uuid
+  location   location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+}
+
+model tag {
+  name         String        @unique
+  content_tag  content_tag[]
+  feeders_tags feeder_tag[]
+}
+
+model content {
+  id String @id @default(uuid()) @db.Uuid
+
+  name String @db.Citext
+  type String
+
+  userId String @db.Uuid
+  user   user   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  label      content_label?
+  properties content_properties?
+  tags       content_tag[]
+
+  sourceContents  related_contents[] @relation(name: "source_content")
+  relatedContents related_contents[] @relation(name: "related_content")
+
+  location   location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  locationId String   @db.Uuid
+
+  file file?
+
+  createdAt DateTime @default(now())
+
+  posts        post[]
+  interactions content_interactions?
+
+  @@unique([locationId, name])
+}
+
+model related_contents {
+  sourceContentId String  @db.Uuid
+  sourceContent   content @relation(name: "related_content", fields: [sourceContentId], references: [id], onDelete: Cascade)
+
+  relatedContentId String  @db.Uuid
+  relatedContent   content @relation(name: "source_content", fields: [relatedContentId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceContentId, relatedContentId])
+}
+
+model content_tag {
+  content content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  tag     tag     @relation(fields: [name], references: [name], onDelete: Cascade)
+
+  contentId String @db.Uuid
+  name      String
+
+  @@unique([contentId, name])
+}
+
+model content_properties {
+  content   content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  contentId String  @unique @db.Uuid
+
+  properties Json
+}
+
+model content_label {
+  description String?
+
+  content   content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  contentId String  @unique @db.Uuid
+}
+
+model content_interactions {
+  content   content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  contentId String  @unique @db.Uuid
+
+  plays    Int @default(0)
+  likes    Int @default(0)
+  comments Int @default(0)
+  rates    Int @default(0)
+  feeders  Int @default(0)
+}
+
+model file {
+  id String @id @default(uuid()) @db.Uuid
+
+  size         Int
+  originalName String
+  duration     Int
+
+  url         String
+  urlOriginal String
+
+  waveform   waveform?
+  properties file_properties?
+
+  userId  String  @db.Uuid
+  storage storage @relation(fields: [userId], references: [userId])
+
+  contentId String?  @unique @db.Uuid
+  content   content? @relation(fields: [contentId], references: [id], onDelete: Cascade)
+}
+
+model file_properties {
+  fileId String @unique @db.Uuid
+  file   file   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  loudness Float?
+  peak     Float?
+  channels Int?
+}
+
+model waveform {
+  fileId String @unique @db.Uuid
+  file   file   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  data Bytes
+}

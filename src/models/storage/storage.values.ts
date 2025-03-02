@@ -1,0 +1,3 @@
+export const STORAGE = {
+  DEFAULT_CAPACITY: 104857600,
+};

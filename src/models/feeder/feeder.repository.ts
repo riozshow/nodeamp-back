@@ -1,0 +1,134 @@
+import { Injectable } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { DbService } from 'src/db/db.service';
+import { feeder } from '@prisma/client';
+import { FeederEvents } from '../../events/feeder.events';
+import { NewFeeder } from 'src/models/hub/hub.dto';
+import { NodeRepository } from '../node/node.repository';
+import { NodeProcesses } from '../node/node.processes';
+
+@Injectable()
+export class FeederRepository {
+  constructor(
+    private db: DbService,
+    private nodeRepository: NodeRepository,
+    private nodeProcesses: NodeProcesses,
+    private eventEmitter: EventEmitter2,
+  ) {}
+
+  private emit = {
+    create: (feeder: feeder) =>
+      this.eventEmitter.emit(FeederEvents.create, feeder),
+    update: (feeder: feeder) =>
+      this.eventEmitter.emit(FeederEvents.update, feeder),
+    remove: (feeder: feeder) =>
+      this.eventEmitter.emit(FeederEvents.remove, feeder),
+  };
+
+  public get = {
+    details: async (id: string) => {
+      await this.db.feeder.findUnique({
+        where: {
+          id,
+        },
+        select: {
+          id: true,
+          name: true,
+          label: {
+            select: {
+              description: true,
+            },
+          },
+          stats: {
+            select: {
+              postsCount: true,
+            },
+          },
+          tags: {
+            select: {
+              count: true,
+              name: true,
+            },
+          },
+          connectedHubs: {
+            select: {
+              hub: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    },
+    inputId: async (id: string) =>
+      (
+        await this.db.feeder.findUnique({
+          where: { id },
+          select: { inputNodeId: true },
+        })
+      ).inputNodeId,
+  };
+
+  public create = {
+    one: async (hubId: string, data: NewFeeder & { userId: string }) => {
+      const [inputNode, outputNode] = await Promise.all([
+        this.nodeRepository.create.one(
+          hubId,
+          'input',
+          `${data.name} input`,
+          data,
+        ),
+        this.nodeRepository.create.one(
+          hubId,
+          'output',
+          `${data.name} output`,
+          data,
+        ),
+      ]);
+
+      await this.nodeProcesses.connect(inputNode.id, outputNode.id);
+
+      const feeder = await this.db.feeder.create({
+        data: {
+          name: data.name,
+          hub: { connect: { id: hubId, userId: data.userId } },
+          user: { connect: { id: data.userId } },
+          inputNode: {
+            connect: { id: inputNode.id },
+          },
+          outputNode: {
+            connect: { id: outputNode.id },
+          },
+          stats: {
+            create: {
+              postsCount: 0,
+            },
+          },
+        },
+      });
+
+      this.emit.create(feeder);
+
+      return feeder;
+    },
+  };
+
+  public delete = {
+    one: async (id: string, userId: string, hubId: string) => {
+      const feeder = await this.db.feeder.delete({
+        where: {
+          id,
+          hubId,
+          userId,
+        },
+      });
+
+      this.emit.remove(feeder);
+
+      return feeder;
+    },
+  };
+}
