@@ -42,20 +42,29 @@ export class HubRepository {
       const hub = await this.db.hub.findUnique({
         where: { id: hubId },
         select: {
+          id: true,
           name: true,
           userId: true,
           defaultFeederId: true,
         },
       });
 
-      const localFeeders = this.hubPermissions.getPermittedFeeders(
+      const localFeeders = await this.hubPermissions.getPermittedFeeders(
+        hubId,
+        requestUserId,
+      );
+
+      const nodes = await this.hubPermissions.getPermittedNodes(
         hubId,
         requestUserId,
       );
 
       return {
-        ...hub,
+        id: hub.id,
+        name: hub.name,
+        defaultFeederId: hub.defaultFeederId,
         localFeeders,
+        nodes,
         configurable: hub.userId === requestUserId,
       };
     },

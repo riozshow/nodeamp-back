@@ -18,21 +18,26 @@ export class NewFeeder {
 
   @ValidateNested({ each: true })
   @IsArray()
+  @IsOptional()
   create?: string[];
 
   @ValidateNested({ each: true })
   @IsArray()
+  @IsOptional()
   view?: string[];
 
   @ValidateNested({ each: true })
   @IsArray()
+  @IsOptional()
   remove?: string[];
 
   @ValidateNested({ each: true })
   @IsArray()
+  @IsOptional()
   share?: string[];
 
   @ValidateNested({ each: true })
   @IsArray()
+  @IsOptional()
   comment?: string[];
 }

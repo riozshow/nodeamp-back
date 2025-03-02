@@ -16,6 +16,8 @@ import { GroupsModule } from './models/groups/groups.module';
 import { WebsocketModule } from './websocket/websocket.module';
 import { ShareModule } from './models/share/share.module';
 import { EventsModule } from './events/events.module';
+import { NodeModule } from './models/node/node.module';
+import { NodeController } from './models/node/node.controller';
 
 @Module({
   imports: [
@@ -36,6 +38,8 @@ import { EventsModule } from './events/events.module';
     WebsocketModule,
     ShareModule,
     EventsModule,
+    NodeModule,
   ],
+  controllers: [NodeController],
 })
 export class AppModule {}

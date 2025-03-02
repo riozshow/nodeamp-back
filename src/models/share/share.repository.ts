@@ -68,6 +68,39 @@ export class ShareRepository {
         },
       });
     },
+    byNodeId: async (nodeId: string, skip: number, requestUserId?: string) => {
+      return await this.db.share.findMany({
+        where: {
+          nodeId,
+          acceptedAt: { not: null },
+        },
+        select: {
+          id: true,
+          comments: {
+            where: { userId: requestUserId },
+          },
+          likes: {
+            where: { userId: requestUserId },
+          },
+          message: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          post: {
+            select: PostRepository.POST_SHARE_SELECT,
+          },
+          acceptedAt: true,
+        },
+        take: ShareRepository.PAGE_SIZE,
+        skip,
+        orderBy: {
+          acceptedAt: 'desc',
+        },
+      });
+    },
   };
 
   public update = {

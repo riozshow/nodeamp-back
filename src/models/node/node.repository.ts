@@ -39,4 +39,14 @@ export class NodeRepository {
       return node;
     },
   };
+
+  public delete = {
+    one: async (nodeId: string) => {
+      const node = await this.db.node.delete({
+        where: { id: nodeId },
+      });
+
+      return node;
+    },
+  };
 }

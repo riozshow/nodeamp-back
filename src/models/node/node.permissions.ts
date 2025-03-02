@@ -1,13 +1,20 @@
 import { Injectable } from '@nestjs/common';
-import { DbService } from 'src/db/db.service';
 import { NodeTypeActions, NodeActions } from './node.actions';
 import { PrismaClient } from '@prisma/client';
+import { DbService } from 'src/db/db.service';
 
-Injectable();
+@Injectable()
 export class NodePermmissions {
   constructor(private db: DbService) {}
 
-  async getNodePermissions(id: string, requestUserId: string) {
+  getPermissionKey(permission: string) {
+    const nodeAction = Object.entries(NodeActions).find(
+      ([key, value]) => value === permission,
+    );
+    return nodeAction[0];
+  }
+
+  async getNodePermissions(id: string, requestUserId?: string) {
     const node = await this.db.node.findUnique({
       where: { id },
       select: {
@@ -20,7 +27,7 @@ export class NodePermmissions {
     const actions: string[] = NodeTypeActions[node.type] || [];
 
     if (node.hub.userId === requestUserId) {
-      return actions;
+      return actions.map((permission) => this.getPermissionKey(permission));
     }
 
     const permissions = node.permissions.data as unknown;
@@ -73,7 +80,7 @@ export class NodePermmissions {
     const data: {
       [key: string]: {
         allow?: string[];
-        deny?: string[];
+        deny: string[];
       };
     } = {};
 
@@ -87,8 +94,18 @@ export class NodePermmissions {
         );
         data[action].allow = filteredGroupIds;
       }
-      data[action].deny = [blockedGroupId];
+      if (data[action]?.deny) {
+        data[action].deny = [blockedGroupId];
+      } else {
+        data[action] = { deny: [blockedGroupId] };
+      }
     }
+
+    await this.db.node_permissions.upsert({
+      where: { nodeId: id },
+      update: { data },
+      create: { nodeId: id, data },
+    });
   }
 
   static async getUserGroupsIdsByHubId(

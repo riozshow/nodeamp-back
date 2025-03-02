@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { HubController } from './hub.controller';
 import { DbModule } from 'src/db/db.module';
 import { HubRepository } from './hub.repository';

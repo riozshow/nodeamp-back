@@ -99,7 +99,7 @@ model node_connections {
   targetNodeId String @unique @db.Uuid
   targetNode   node   @relation(name: "target_node", fields: [targetNodeId], references: [id], onDelete: Cascade)
 
-  requirements Json
+  requirements Json?
 }
 
 model node_position {
@@ -121,8 +121,8 @@ model feeder {
   inputNodeId  String @unique @db.Uuid
   outputNodeId String @unique @db.Uuid
 
-  inputNode  node @relation(name: "input_node", fields: [inputNodeId], references: [id], onDelete: Cascade)
-  outputNode node @relation(name: "output_node", fields: [outputNodeId], references: [id], onDelete: Cascade)
+  inputNode  node @relation(name: "input_node", fields: [inputNodeId], references: [id])
+  outputNode node @relation(name: "output_node", fields: [outputNodeId], references: [id])
 
   hub   hub    @relation(fields: [hubId], references: [id], onDelete: Cascade)
   hubId String @db.Uuid

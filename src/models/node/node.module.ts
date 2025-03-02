@@ -1,21 +1,22 @@
 import { forwardRef, Module } from '@nestjs/common';
 import { DbModule } from 'src/db/db.module';
-import { NodeEvents } from 'src/events/node.events';
 import { WebsocketModule } from 'src/websocket/websocket.module';
 import { NodeRepository } from './node.repository';
 import { UsersModule } from 'src/models/user/users.module';
 import { NodePermmissions } from './node.permissions';
 import { NodeProcesses } from './node.processes';
 import { ShareModule } from '../share/share.module';
+import { NodeController } from './node.controller';
 
 @Module({
-  providers: [NodeEvents, NodeProcesses, NodeRepository, NodePermmissions],
-  exports: [NodeProcesses, NodeRepository],
+  controllers: [NodeController],
+  providers: [NodePermmissions, NodeProcesses, NodeRepository],
+  exports: [NodeProcesses, NodeRepository, NodePermmissions],
   imports: [
     DbModule,
     WebsocketModule,
-    forwardRef(() => UsersModule),
     ShareModule,
+    forwardRef(() => UsersModule),
   ],
 })
 export class NodeModule {}

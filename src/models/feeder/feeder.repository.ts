@@ -6,6 +6,7 @@ import { FeederEvents } from '../../events/feeder.events';
 import { NewFeeder } from 'src/models/hub/hub.dto';
 import { NodeRepository } from '../node/node.repository';
 import { NodeProcesses } from '../node/node.processes';
+import { FeederPermissions } from './feeder.permissions';
 
 @Injectable()
 export class FeederRepository {
@@ -13,6 +14,7 @@ export class FeederRepository {
     private db: DbService,
     private nodeRepository: NodeRepository,
     private nodeProcesses: NodeProcesses,
+    private feederPermissions: FeederPermissions,
     private eventEmitter: EventEmitter2,
   ) {}
 
@@ -26,14 +28,19 @@ export class FeederRepository {
   };
 
   public get = {
-    details: async (id: string) => {
-      await this.db.feeder.findUnique({
+    details: async (id: string, requestUserId: string) => {
+      const permissions = await this.feederPermissions.getFeederPermissions(
+        id,
+        requestUserId,
+      );
+      const feeder = await this.db.feeder.findUnique({
         where: {
           id,
         },
         select: {
           id: true,
           name: true,
+          outputNodeId: true,
           label: {
             select: {
               description: true,
@@ -62,6 +69,7 @@ export class FeederRepository {
           },
         },
       });
+      return { ...feeder, permissions };
     },
     inputId: async (id: string) =>
       (
@@ -125,6 +133,11 @@ export class FeederRepository {
           userId,
         },
       });
+
+      await Promise.all([
+        this.nodeRepository.delete.one(feeder.inputNodeId),
+        this.nodeRepository.delete.one(feeder.outputNodeId),
+      ]);
 
       this.emit.remove(feeder);
 

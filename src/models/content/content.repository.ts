@@ -31,10 +31,10 @@ export class ContentRepository {
         likes: true,
         comments: true,
         rates: true,
-        shares: true,
+        feeders: true,
       },
     },
-    audioFile: {
+    file: {
       select: {
         id: true,
         duration: true,

@@ -4,6 +4,7 @@ import { CreateUserDTO, UpdateUser } from './users.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { StorageRepository } from 'src/models/storage/storage.repository';
 import { HubRepository } from 'src/models/hub/hub.repository';
+import { UsersProcesses } from './users.processes';
 
 @Injectable()
 export class UsersRepository {
@@ -12,6 +13,7 @@ export class UsersRepository {
     private hubRepository: HubRepository,
     private storageRepository: StorageRepository,
     private eventEmitter: EventEmitter2,
+    private usersProcesses: UsersProcesses,
   ) {}
 
   public get = {
@@ -80,7 +82,8 @@ export class UsersRepository {
       });
 
       await this.storageRepository.create.storage(user.id);
-      await this.hubRepository.create.one(user.id, userData.name);
+      const hub = await this.hubRepository.create.one(user.id, userData.name);
+      await this.usersProcesses.connectProfileHub(user.id, hub.id);
 
       this.eventEmitter.emit('user.created', user);
       return user;

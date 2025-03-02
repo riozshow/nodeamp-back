@@ -21,3 +21,5 @@ export const NODE = {
   OUTPUT: 'output',
   RATER: 'rater',
 };
+
+export const VISIBLE_NODES = [NODE.RATER];

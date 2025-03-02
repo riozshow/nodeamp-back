@@ -29,8 +29,12 @@ export class FeederController {
 
   @UseGuards(new GroupGuard({ feederId: 'feederId' }, NodeActions.view))
   @Get(':feederId/details')
-  async getDetails(@Param('feederId') feederId: string) {
-    return await this.repository.get.details(feederId);
+  async getDetails(
+    @Param('feederId') feederId: string,
+    @Session() session: SessionType,
+  ) {
+    const userId = session.passport.user.id;
+    return await this.repository.get.details(feederId, userId);
   }
 
   @UseGuards(new GroupGuard({ feederId: 'feederId' }, NodeActions.create))

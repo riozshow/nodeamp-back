@@ -4,9 +4,10 @@ import { DbModule } from 'src/db/db.module';
 import { UserController } from './users.controller';
 import { HubModule } from 'src/models/hub/hub.module';
 import { StorageModule } from 'src/models/storage/storage.module';
+import { UsersProcesses } from './users.processes';
 
 @Module({
-  providers: [UsersRepository],
+  providers: [UsersRepository, UsersProcesses],
   imports: [DbModule, HubModule, StorageModule],
   exports: [UsersRepository],
   controllers: [UserController],

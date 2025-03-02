@@ -37,7 +37,7 @@ export class HubGuard implements CanActivate {
             const ownFeeder = await prisma.feeder.count({
               where: { id: feederId, userId: user.id, hubId },
             });
-            if (!!ownFeeder) {
+            if (!ownFeeder) {
               return false;
             }
           }
@@ -51,7 +51,7 @@ export class HubGuard implements CanActivate {
                 },
               },
             });
-            if (!!ownNode) {
+            if (!ownNode) {
               return false;
             }
           }

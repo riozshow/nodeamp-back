@@ -9,7 +9,7 @@ import { ShareModule } from '../share/share.module';
 
 @Module({
   imports: [DbModule, NodeModule, ShareModule],
-  exports: [FeederRepository],
+  exports: [FeederRepository, FeederPermissions],
   providers: [FeederPermissions, FeederRepository, FeederProcesses],
   controllers: [FeederController],
 })

@@ -52,7 +52,7 @@ export class NodeProcesses {
         data: {
           sourceNode: { connect: { id: sorceNodeId, type: { not: 'output' } } },
           targetNode: { connect: { id: targetNodeId, type: { not: 'input' } } },
-          requirements: requirements,
+          ...(requirements ? { requirements } : {}),
         },
       });
     }
