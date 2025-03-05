@@ -11,10 +11,17 @@ export class PostRepository {
     content: {
       select: ContentRepository.CONTENT_SHARE_SELECT,
     },
+    message: true,
     creatorFeeder: {
       select: {
         id: true,
         name: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     },
     user: {

@@ -23,6 +23,7 @@ import { NodeController } from './models/node/node.controller';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     EventEmitterModule.forRoot(),
+    EventsModule,
     AuthModule,
     UsersModule,
     DbModule,
@@ -37,7 +38,6 @@ import { NodeController } from './models/node/node.controller';
     GroupsModule,
     WebsocketModule,
     ShareModule,
-    EventsModule,
     NodeModule,
   ],
   controllers: [NodeController],

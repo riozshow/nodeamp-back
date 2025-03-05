@@ -46,22 +46,36 @@ export class HubRepository {
           name: true,
           userId: true,
           defaultFeederId: true,
+          ...(requestUserId
+            ? {
+                subscribers: {
+                  where: { userId: requestUserId },
+                  select: {
+                    userId: true,
+                  },
+                },
+              }
+            : {}),
         },
       });
 
       const localFeeders = await this.hubPermissions.getPermittedFeeders(
         hubId,
         requestUserId,
+        !!hub.subscribers.length,
       );
 
       const nodes = await this.hubPermissions.getPermittedNodes(
         hubId,
         requestUserId,
+        !!hub.subscribers.length,
       );
 
       return {
         id: hub.id,
+        userId: hub.userId,
         name: hub.name,
+        subscribes: !!hub.subscribers.length,
         defaultFeederId: hub.defaultFeederId,
         localFeeders,
         nodes,

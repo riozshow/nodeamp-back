@@ -10,7 +10,28 @@ export class HubPermissions {
     private nodePermissions: NodePermmissions,
   ) {}
 
-  async getPermittedFeeders(hubId: string, reqestUserId: string) {
+  getNewSharesInfo({
+    visits,
+    lastShareAt,
+  }: {
+    visits: { lastVisitAt: Date }[];
+    lastShareAt: Date;
+  }) {
+    if (visits?.length) {
+      const [{ lastVisitAt }] = visits;
+      const lastVisitDate = new Date(lastVisitAt).getTime();
+      const lastShareDate = new Date(lastShareAt).getTime();
+      return lastShareDate > lastVisitDate;
+    } else {
+      return !!lastShareAt;
+    }
+  }
+
+  async getPermittedFeeders(
+    hubId: string,
+    requestUserId: string,
+    isSubscriber?: boolean,
+  ) {
     const feedersOutputNodes = await this.db.node.findMany({
       where: {
         hubId,
@@ -18,6 +39,15 @@ export class HubPermissions {
       },
       select: {
         id: true,
+        lastShareAt: true,
+        ...(isSubscriber
+          ? {
+              visits: {
+                where: { userId: requestUserId },
+                select: { lastVisitAt: true },
+              },
+            }
+          : {}),
         feederOutput: {
           select: {
             id: true,
@@ -33,18 +63,38 @@ export class HubPermissions {
         ...node,
         permissions: await this.nodePermissions.getNodePermissions(
           node.id,
-          reqestUserId,
+          requestUserId,
         ),
       })),
     ).then((nodes) => nodes.filter((n) => n.permissions.includes('view')));
 
-    return nodesPermissions.map((n) => n.feederOutput);
+    return nodesPermissions.map((n) => ({
+      ...n.feederOutput,
+      hasNewShares: this.getNewSharesInfo(n),
+    }));
   }
 
-  async getPermittedNodes(hubId: string, requestUserId: string) {
+  async getPermittedNodes(
+    hubId: string,
+    requestUserId: string,
+    isSubscriber?: boolean,
+  ) {
     const hubNodes = await this.db.node.findMany({
       where: { hubId, type: { in: VISIBLE_NODES } },
-      select: { id: true, name: true, type: true },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        lastShareAt: true,
+        ...(isSubscriber
+          ? {
+              visits: {
+                where: { userId: requestUserId },
+                select: { lastVisitAt: true },
+              },
+            }
+          : {}),
+      },
     });
 
     const nodesWithPermission = await Promise.all(

@@ -5,8 +5,8 @@ import { PostRepository } from 'src/models/post/post.repository';
 import { ShareCreateDTO, ShareShareDTO } from './share.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { share } from '@prisma/client';
-import { ShareEvents } from 'src/events/share.events';
 import { getCurrentDate } from 'src/utils/getCurrentDate';
+import { EVENTS } from 'src/events/events.names';
 
 @Injectable()
 export class ShareRepository {
@@ -19,13 +19,31 @@ export class ShareRepository {
 
   static PAGE_SIZE = 5;
 
+  static NODE_SHARE_SELECT = {
+    id: true,
+    isPinned: true,
+    user: {
+      select: {
+        id: true,
+        name: true,
+      },
+    },
+    post: { select: PostRepository.POST_SHARE_SELECT },
+    acceptedAt: true,
+  };
+
   private emit = {
-    create: (share: share) => this.eventEmitter.emit(ShareEvents.create, share),
-    update: (share: share) => this.eventEmitter.emit(ShareEvents.update, share),
-    remove: (share: share) => this.eventEmitter.emit(ShareEvents.remove, share),
-    accept: (share: share) => this.eventEmitter.emit(ShareEvents.accept, share),
-    reject: (share: share) => this.eventEmitter.emit(ShareEvents.reject, share),
-    move: (share: share) => this.eventEmitter.emit(ShareEvents.move, share),
+    create: (share: share) =>
+      this.eventEmitter.emit(EVENTS.SHARES.CREATE, share),
+    update: (share: share) =>
+      this.eventEmitter.emit(EVENTS.SHARES.UPDATE, share),
+    remove: (share: share) =>
+      this.eventEmitter.emit(EVENTS.SHARES.REMOVE, share),
+    accept: (share: share) =>
+      this.eventEmitter.emit(EVENTS.SHARES.ACCEPT, share),
+    reject: (share: share) =>
+      this.eventEmitter.emit(EVENTS.SHARES.REJECT, share),
+    move: (share: share) => this.eventEmitter.emit(EVENTS.SHARES.MOVE, share),
   };
 
   public get = {
@@ -42,24 +60,13 @@ export class ShareRepository {
           acceptedAt: { not: null },
         },
         select: {
-          id: true,
+          ...ShareRepository.NODE_SHARE_SELECT,
           comments: {
             where: { userId: requestUserId },
           },
           likes: {
             where: { userId: requestUserId },
           },
-          message: true,
-          user: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          post: {
-            select: PostRepository.POST_SHARE_SELECT,
-          },
-          acceptedAt: true,
         },
         take: ShareRepository.PAGE_SIZE,
         skip,
@@ -75,27 +82,43 @@ export class ShareRepository {
           acceptedAt: { not: null },
         },
         select: {
-          id: true,
+          ...ShareRepository.NODE_SHARE_SELECT,
           comments: {
             where: { userId: requestUserId },
           },
           likes: {
             where: { userId: requestUserId },
           },
-          message: true,
-          user: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          post: {
-            select: PostRepository.POST_SHARE_SELECT,
-          },
-          acceptedAt: true,
         },
         take: ShareRepository.PAGE_SIZE,
         skip,
+        orderBy: {
+          acceptedAt: 'desc',
+        },
+      });
+    },
+    lastByNodeId: async (
+      nodeId: string,
+      lastShareId: string,
+      requestUserId?: string,
+    ) => {
+      return await this.db.share.findMany({
+        where: {
+          nodeId,
+          acceptedAt: { not: null },
+        },
+        select: {
+          ...ShareRepository.NODE_SHARE_SELECT,
+          comments: {
+            where: { userId: requestUserId },
+          },
+          likes: {
+            where: { userId: requestUserId },
+          },
+        },
+        take: ShareRepository.PAGE_SIZE * -1,
+        skip: 1,
+        cursor: { id: lastShareId },
         orderBy: {
           acceptedAt: 'desc',
         },
@@ -114,6 +137,15 @@ export class ShareRepository {
       this.emit.accept(share);
       return share;
     },
+    pin: async (shareId: string) => {
+      const share = await this.db.share.update({
+        where: { id: shareId },
+        data: {
+          isPinned: true,
+        },
+      });
+      return share;
+    },
     moveTo: async (shareId: string, nodeId: string) => {
       const share = await this.db.share.update({
         where: { id: shareId },
@@ -130,10 +162,8 @@ export class ShareRepository {
   public create = {
     inFeeder: async (feederId: string, post: ShareCreateDTO) => {
       const inputNodeId = await this.feederRepository.get.inputId(feederId);
-
       const share = await this.db.share.create({
         data: {
-          message: post.message,
           node: {
             connect: {
               id: inputNodeId,
@@ -141,22 +171,20 @@ export class ShareRepository {
           },
           post: {
             create: {
+              message: post.message,
               content: {
                 connect: { id: post.contentId, userId: post.userId },
               },
               creatorFeeder: {
                 connect: { id: feederId },
               },
-              interactions: { create: {} },
               user: { connect: { id: post.userId } },
             },
           },
           user: { connect: { id: post.userId } },
         },
       });
-
       this.emit.create(share);
-
       return share;
     },
   };
@@ -165,31 +193,38 @@ export class ShareRepository {
     inFeeder: async (
       feederId: string,
       sourceFeederId: string,
-      post: ShareShareDTO,
+      share: ShareShareDTO,
     ) => {
       const inputNodeId = await this.feederRepository.get.inputId(feederId);
-
-      const share = await this.db.share.create({
-        data: {
-          message: post.message,
-          node: {
-            connect: {
-              id: inputNodeId,
+      const post = await this.db.post.findFirst({
+        where: {
+          shares: {
+            some: {
+              id: share.shareId,
+              node: { feederOutput: { id: sourceFeederId } },
             },
           },
-          post: {
-            connect: {
-              id: post.postId,
-              shares: {
-                some: { node: { feederOutput: { id: sourceFeederId } } },
-              },
-            },
-          },
-          user: { connect: { id: post.userId } },
         },
       });
-      this.emit.create(share);
-      return share;
+      if (post) {
+        const newShare = await this.db.share.create({
+          data: {
+            node: {
+              connect: {
+                id: inputNodeId,
+              },
+            },
+            post: {
+              connect: {
+                id: post.id,
+              },
+            },
+            user: { connect: { id: post.userId } },
+          },
+        });
+        this.emit.create(newShare);
+        return newShare;
+      }
     },
   };
 
@@ -203,6 +238,16 @@ export class ShareRepository {
               id: feederId,
             },
           },
+        },
+      });
+      this.emit.remove(share);
+      return share;
+    },
+    fromNode: async (shareId: string, nodeId: string) => {
+      const share = await this.db.share.delete({
+        where: {
+          id: shareId,
+          nodeId,
         },
       });
       this.emit.remove(share);

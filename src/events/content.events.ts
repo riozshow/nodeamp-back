@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { DbService } from 'src/db/db.service';
 import { feeder, content } from '@prisma/client';
-import { ShareEvents } from 'src/events/share.events';
+import { EVENTS } from './events.names';
 
 @Injectable()
 export class ContentEvents {
@@ -11,18 +11,18 @@ export class ContentEvents {
     private emitter: EventEmitter2,
   ) {}
 
-  @OnEvent(ShareEvents.remove)
-  @OnEvent(ShareEvents.like)
-  @OnEvent(ShareEvents.unlike)
+  @OnEvent(EVENTS.SHARES.REMOVE)
+  @OnEvent(EVENTS.SHARES.LIKE)
+  @OnEvent(EVENTS.SHARES.UNLIKE)
   async updateLikes({ id }: { id?: string }) {
     if (!id) return;
 
     const content = await this.db.content.findFirst({
       where: {
         posts: {
-          some: {
+          every: {
             shares: {
-              some: {
+              every: {
                 id,
               },
             },
@@ -39,7 +39,7 @@ export class ContentEvents {
       select: { id: true, shares: { select: { id: true } } },
     });
 
-    const likes = await this.db.share_like.groupBy({
+    const likes = await this.db.content_like.groupBy({
       by: ['userId'],
       where: {
         shareId: { in: posts.map((p) => p.shares.map((s) => s.id)).flat() },
@@ -52,8 +52,8 @@ export class ContentEvents {
     });
   }
 
-  @OnEvent(ShareEvents.accept)
-  @OnEvent(ShareEvents.remove)
+  @OnEvent(EVENTS.SHARES.ACCEPT)
+  @OnEvent(EVENTS.SHARES.REMOVE)
   async updateShares({ contentId }: { contentId?: string }) {
     if (!contentId) return;
 
@@ -79,8 +79,11 @@ export class ContentEvents {
     });
   }
 
-  @OnEvent(ShareEvents.uncomment)
-  @OnEvent(ShareEvents.comment)
+  @OnEvent(EVENTS.POSTS.REMOVE)
+  async updateFeeders({ id }: { id: string }) {}
+
+  @OnEvent(EVENTS.SHARES.COMMENT)
+  @OnEvent(EVENTS.SHARES.UNCOMMENT)
   async updateComments({ postId }: { postId: string }) {
     const content = await this.db.content.findFirst({
       where: {
@@ -101,7 +104,7 @@ export class ContentEvents {
         select: { id: true },
       });
 
-      const comments = await this.db.share_comment.findMany({
+      const comments = await this.db.content_comment.findMany({
         where: {
           shareId: { in: posts.map((p) => p.id) },
         },
@@ -122,7 +125,7 @@ export class ContentEvents {
     }
   }
 
-  @OnEvent(ShareEvents.remove)
+  @OnEvent(EVENTS.FEEDERS.REMOVE)
   async updateSharesAfterFeederDelete({ inputNodeId, outputNodeId }: feeder) {
     await this.db.post.deleteMany({
       where: {
@@ -152,7 +155,7 @@ export class ContentEvents {
     );
   }
 
-  @OnEvent(ShareEvents.update)
+  @OnEvent(EVENTS.SHARES.UPDATE)
   async handleFeederContentChange(content: content) {
     const posts = await this.db.post.findMany({
       where: { contentId: content.id },

@@ -78,7 +78,7 @@ export class FeederPostShareDTO {
   feederId: string;
 
   @IsUUID('4')
-  postId: string;
+  shareId: string;
 
   label: {
     description?: string;
@@ -90,7 +90,7 @@ export class FeederPostRateDTO {
   feederId: string;
 
   @IsUUID('4')
-  postId: string;
+  shareId: string;
 
   @IsUUID('4')
   portalId: string;

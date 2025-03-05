@@ -28,10 +28,10 @@ export class StorageController {
   }
 
   @UseGuards(AuthenticatedGuard)
-  @Post('locations/:locationId')
+  @Post('upload')
   async uploadFile(
     @Session() session: SessionType,
-    @Param('locationId') locationId: string,
+    @Query('path') path: string,
   ) {
     const userId = session.passport?.user.id;
 
@@ -48,7 +48,7 @@ export class StorageController {
       path: undefined,
     };
 
-    return await this.repository.create.file(userId, locationId, file);
+    return await this.repository.create.file(userId, path, file);
   }
 
   @UseGuards(AuthenticatedGuard)

@@ -1,13 +1,27 @@
 import { Injectable } from '@nestjs/common';
 import { DbService } from 'src/db/db.service';
 import { NodePermmissions } from './node.permissions';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { EVENTS } from 'src/events/events.names';
 
 @Injectable()
 export class NodeRepository {
   constructor(
     private db: DbService,
     private permissions: NodePermmissions,
+    private eventEmitter: EventEmitter2,
   ) {}
+
+  private emit = {
+    visit: (visit: { userId: string; nodeId: string }) =>
+      this.eventEmitter.emit(EVENTS.NODES.VISIT, visit),
+  };
+
+  public get = {
+    visit: async (nodeId: string, userId: string) => {
+      this.emit.visit({ userId, nodeId });
+    },
+  };
 
   public create = {
     one: async (
@@ -27,7 +41,7 @@ export class NodeRepository {
         data: {
           name,
           type,
-          hubId,
+          hub: { connect: { id: hubId } },
         },
         select: {
           id: true,

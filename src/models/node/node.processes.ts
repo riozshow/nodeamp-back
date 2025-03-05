@@ -71,12 +71,15 @@ export class NodeProcesses {
     switch (share.node.type) {
       case NODE.INPUT: {
         status = { ...(await this.shareStatus.ofInputNode(share)), ...status };
+        break;
       }
       case NODE.OUTPUT: {
         status = { ...(await this.shareStatus.ofOutputNode(share)), ...status };
+        break;
       }
       case NODE.RATER: {
         status = { ...(await this.shareStatus.ofRaterNode(share)), ...status };
+        break;
       }
     }
 

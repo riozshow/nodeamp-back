@@ -3,7 +3,7 @@ import { DbService } from 'src/db/db.service';
 import { OnEvent } from '@nestjs/event-emitter';
 import { share } from '@prisma/client';
 import { FeederProcesses } from '../models/feeder/feeder.processes';
-import { ShareEvents } from 'src/events/share.events';
+import { EVENTS } from './events.names';
 
 @Injectable()
 export class FeederEvents {
@@ -12,16 +12,12 @@ export class FeederEvents {
     private processes: FeederProcesses,
   ) {}
 
-  static create: 'feeder.create';
-  static update: 'feeder.update';
-  static remove: 'feeder.remove';
-
-  @OnEvent(ShareEvents.update)
-  @OnEvent(ShareEvents.accept)
-  @OnEvent(ShareEvents.remove)
+  @OnEvent(EVENTS.SHARES.UPDATE)
+  @OnEvent(EVENTS.SHARES.ACCEPT)
+  @OnEvent(EVENTS.SHARES.REMOVE)
   async handleFeederTagsChange({ id }: share) {
     const shares = await this.db.share.findMany({
-      where: { id },
+      where: { id, acceptedAt: { not: null } },
       select: {
         nodeId: true,
       },

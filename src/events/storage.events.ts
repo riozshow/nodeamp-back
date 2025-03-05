@@ -2,14 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { storage } from '@prisma/client';
 import { DbService } from 'src/db/db.service';
+import { EVENTS } from './events.names';
 
 @Injectable()
 export class StorageEvents {
   constructor(private db: DbService) {}
 
-  static update: 'storage.update';
-
-  @OnEvent(StorageEvents.update)
+  @OnEvent(EVENTS.STORAGE.UPDATE)
   async updateStats({ userId }: storage) {
     const used = await this.db.file.aggregate({
       where: { userId },

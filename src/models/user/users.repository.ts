@@ -85,7 +85,7 @@ export class UsersRepository {
       const hub = await this.hubRepository.create.one(user.id, userData.name);
       await this.usersProcesses.connectProfileHub(user.id, hub.id);
 
-      this.eventEmitter.emit('user.created', user);
+      //this.eventEmitter.emit('user.created', user);
       return user;
     },
   };

@@ -31,18 +31,20 @@ model user {
   profileHubId String? @unique @db.Uuid
   profileHub   hub?    @relation(name: "profile_hub", fields: [profileHubId], references: [id])
 
-  label      user_label?
-  storage    storage?
-  hubs       hub[]
-  feeders    feeder[]
-  rates      share_rate[]
-  contents   content[]
-  posts      post[]
-  hubsGroups hub_user_group_member[]
-  images     user_image[]
-  likes      share_like[]
-  comments   share_comment[]
-  shares     share[]
+  label             user_label?
+  storage           storage?
+  hubs              hub[]
+  feeders           feeder[]
+  rates             content_rate[]
+  contents          content[]
+  posts             post[]
+  hubsGroups        hub_user_group_member[]
+  images            user_image[]
+  likes             content_like[]
+  comments          content_comment[]
+  shares            share[]
+  node_visits       node_visit[]
+  hub_subscriptions hub_subscriptions[]
 }
 
 model user_label {
@@ -76,13 +78,30 @@ model node {
   feederOutput feeder? @relation("output_node")
 
   shares share[]
-  rates  share_rate[]
+  rates  content_rate[]
 
   position    node_position?
   permissions node_permissions?
 
   targetNodes node_connections[] @relation(name: "source_node")
   sourceNodes node_connections[] @relation(name: "target_node")
+
+  lastShareAt DateTime     @default(now())
+  visits      node_visit[]
+}
+
+model node_visit {
+  user user @relation(fields: [userId], references: [id], onDelete: Cascade)
+  node node @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  userId String @db.Uuid
+  nodeId String @db.Uuid
+
+  visitCount Int @default(1)
+
+  lastVisitAt DateTime
+
+  @@unique([userId, nodeId])
 }
 
 model node_permissions {
@@ -180,8 +199,17 @@ model hub {
   localFeeders    feeder[]
   externalFeeders hub_external_feeders[]
 
-  nodes  node[]
-  images hub_image[]
+  nodes       node[]
+  images      hub_image[]
+  subscribers hub_subscriptions[]
+}
+
+model hub_subscriptions {
+  hub  hub  @relation(fields: [hubId], references: [id], onDelete: Cascade)
+  user user @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  hubId  String @unique @db.Uuid
+  userId String @unique @db.Uuid
 }
 
 model hub_external_feeders {
@@ -214,8 +242,7 @@ model hub_user_group {
   hub   hub    @relation(fields: [hubId], references: [id], onDelete: Cascade)
   hubId String @db.Uuid
 
-  isUserDefined Boolean @default(true)
-
+  type  String
   name  String
   users hub_user_group_member[]
 
@@ -260,28 +287,17 @@ model post {
   userId String @db.Uuid
   user   user   @relation(fields: [userId], references: [id])
 
+  message String?
+
   creatorFeederId String @db.Uuid
-  creatorFeeder   feeder @relation(fields: [creatorFeederId], references: [id])
+  creatorFeeder   feeder @relation(fields: [creatorFeederId], references: [id], onDelete: Cascade)
 
   contentId String?  @db.Uuid
-  content   content? @relation(fields: [contentId], references: [id])
+  content   content? @relation(fields: [contentId], references: [id], onDelete: Cascade)
 
   shares share[]
 
-  interactions post_interactions?
-
   createdAt DateTime?
-}
-
-model post_interactions {
-  postId String @unique @db.Uuid
-  post   post   @relation(fields: [postId], references: [id], onDelete: Cascade)
-
-  plays    Int? @default(0)
-  likes    Int? @default(0)
-  comments Int? @default(0)
-  rates    Int? @default(0)
-  shares   Int? @default(0)
 }
 
 model share {
@@ -296,54 +312,14 @@ model share {
   node   node   @relation(fields: [nodeId], references: [id], onDelete: Cascade)
   nodeId String @db.Uuid
 
-  message String?
+  isPinned Boolean?
 
-  likes    share_like[]
-  comments share_comment[]
-  rates    share_rate[]
+  likes    content_like[]
+  comments content_comment[]
+  rates    content_rate[]
 
   updatedAt  DateTime?
   acceptedAt DateTime?
-
-  @@unique([postId, nodeId])
-}
-
-model share_rate {
-  rate Int
-
-  userId String @db.Uuid
-  user   user   @relation(fields: [userId], references: [id])
-
-  shareId String @db.Uuid
-  share   share  @relation(fields: [shareId], references: [id], onDelete: Cascade)
-
-  nodeId String @db.Uuid
-  node   node   @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-
-  @@unique([shareId, userId, nodeId])
-}
-
-model share_like {
-  userId String @db.Uuid
-  user   user   @relation(fields: [userId], references: [id])
-
-  shareId String @db.Uuid
-  share   share  @relation(fields: [shareId], references: [id], onDelete: Cascade)
-
-  @@unique([shareId, userId])
-}
-
-model share_comment {
-  id String @id @default(uuid()) @db.Uuid
-
-  userId String @db.Uuid
-  user   user   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  shareId String @db.Uuid
-  share   share  @relation(fields: [shareId], references: [id], onDelete: Cascade)
-
-  time Int?   @default(0)
-  text String
 }
 
 model storage {
@@ -413,12 +389,64 @@ model content {
 
   file file?
 
-  createdAt DateTime @default(now())
+  posts post[]
 
-  posts        post[]
+  rates    content_rate[]
+  likes    content_like[]
+  comments content_comment[]
+
   interactions content_interactions?
 
+  createdAt DateTime @default(now())
+
   @@unique([locationId, name])
+}
+
+model content_rate {
+  rate Int
+
+  userId String @db.Uuid
+  user   user   @relation(fields: [userId], references: [id])
+
+  shareId String @db.Uuid
+  share   share  @relation(fields: [shareId], references: [id], onDelete: Cascade)
+
+  nodeId String @db.Uuid
+  node   node   @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  contentId String  @db.Uuid
+  content   content @relation(fields: [contentId], references: [id])
+
+  @@unique([shareId, userId, nodeId])
+}
+
+model content_like {
+  userId String @db.Uuid
+  user   user   @relation(fields: [userId], references: [id])
+
+  shareId String @db.Uuid
+  share   share  @relation(fields: [shareId], references: [id], onDelete: Cascade)
+
+  contentId String  @db.Uuid
+  content   content @relation(fields: [contentId], references: [id])
+
+  @@unique([shareId, userId])
+}
+
+model content_comment {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String @db.Uuid
+  user   user   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  shareId String @db.Uuid
+  share   share  @relation(fields: [shareId], references: [id], onDelete: Cascade)
+
+  contentId String  @db.Uuid
+  content   content @relation(fields: [contentId], references: [id])
+
+  time Int?   @default(0)
+  text String
 }
 
 model related_contents {

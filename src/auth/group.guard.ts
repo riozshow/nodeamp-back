@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { JsonValue } from '@prisma/client/runtime/library';
 import { isUUID } from 'class-validator';
 import { NodePermmissions } from 'src/models/node/node.permissions';
-import { NodeTypeActions } from 'src/models/node/node.actions';
+import { NodeActions, NodeTypeActions } from 'src/models/node/node.actions';
 
 export type Permissions = {
   [key: string]: {

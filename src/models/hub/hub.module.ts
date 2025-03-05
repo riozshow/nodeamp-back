@@ -9,9 +9,10 @@ import { NodeModule } from '../node/node.module';
 import { WebsocketModule } from 'src/websocket/websocket.module';
 import { HubRouter } from './hub.router';
 import { HubPermissions } from './hub.permissions';
+import { HubProcesses } from './hub.processes';
 
 @Module({
-  providers: [HubRepository, HubRouter, HubPermissions],
+  providers: [HubRepository, HubRouter, HubPermissions, HubProcesses],
   controllers: [HubController],
   imports: [
     DbModule,

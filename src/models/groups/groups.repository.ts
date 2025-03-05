@@ -15,12 +15,12 @@ export class GroupsRepository {
       data: [
         {
           hubId,
-          isUserDefined: false,
+          type: 'blocked',
           name: DefaultGroups.blocked,
         },
         {
           hubId,
-          isUserDefined: false,
+          type: 'subscribers',
           name: DefaultGroups.subscribers,
         },
       ],

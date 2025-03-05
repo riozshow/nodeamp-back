@@ -46,41 +46,27 @@ export class ContentRepository {
     id: true,
     name: true,
     type: true,
+    interactions: {
+      select: {
+        comments: true,
+        feeders: true,
+        likes: true,
+        plays: true,
+        rates: true,
+      },
+    },
     label: {
       select: {
         description: true,
       },
     },
-    properties: {
-      select: {
-        properties: true,
-      },
-    },
-    tags: {
-      select: {
-        name: true,
-      },
-    },
-    interactions: {
-      select: {
-        comments: true,
-        likes: true,
-        plays: true,
-        rates: true,
-        shares: true,
-      },
-    },
-    commentsLine: {
-      select: {
-        data: true,
-      },
-    },
-    audioFile: {
+    file: {
       select: {
         id: true,
+        duration: true,
         originalName: true,
         size: true,
-        duration: true,
+        url: true,
         properties: {
           select: {
             channels: true,
@@ -90,6 +76,11 @@ export class ContentRepository {
         },
       },
     },
+    tags: {
+      select: {
+        name: true,
+      },
+    },
   };
 
   public create = {
@@ -97,14 +88,14 @@ export class ContentRepository {
       userId: string,
       path: string,
       reqType: string,
-      audioFile: file,
+      file: file,
     ) => {
       const { type, location, name } =
         await this.contentProcesses.validateNewContent(
           userId,
           path,
           reqType,
-          audioFile?.originalName,
+          file?.originalName,
         );
 
       const content = await this.db.content.create({
@@ -118,9 +109,7 @@ export class ContentRepository {
           interactions: {
             create: {},
           },
-          ...(audioFile
-            ? { audioFile: { connect: { id: audioFile.id } } }
-            : {}),
+          ...(file ? { file: { connect: { id: file.id } } } : {}),
         },
       });
 

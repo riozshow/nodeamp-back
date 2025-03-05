@@ -15,12 +15,14 @@ import { HubGuard } from 'src/auth/hub.guard';
 import { HubRouter } from './hub.router';
 import { HubRepository } from './hub.repository';
 import { SessionType } from 'src/auth/auth.types';
+import { HubProcesses } from './hub.processes';
 
 @Controller('hubs')
 export class HubController {
   constructor(
     private router: HubRouter,
     private repository: HubRepository,
+    private processes: HubProcesses,
   ) {}
 
   @Get(':hubId')
@@ -56,5 +58,16 @@ export class HubController {
     if (!session.passport?.user.id) throw new NotFoundException();
     const userId = session.passport.user.id;
     return await this.router.deleteFeeder(hubId, userId, feederId);
+  }
+
+  @UseGuards(AuthenticatedGuard)
+  @Post(':hubId/subscribe')
+  async subscribeHub(
+    @Session() session: SessionType,
+    @Param('hubId') hubId: string,
+  ) {
+    if (!session.passport?.user.id) throw new NotFoundException();
+    const userId = session.passport.user.id;
+    return await this.processes.subscribe(hubId, userId);
   }
 }

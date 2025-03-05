@@ -2,11 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DbService } from 'src/db/db.service';
 import { feeder } from '@prisma/client';
-import { FeederEvents } from '../../events/feeder.events';
 import { NewFeeder } from 'src/models/hub/hub.dto';
 import { NodeRepository } from '../node/node.repository';
 import { NodeProcesses } from '../node/node.processes';
 import { FeederPermissions } from './feeder.permissions';
+import { EVENTS } from 'src/events/events.names';
 
 @Injectable()
 export class FeederRepository {
@@ -20,14 +20,26 @@ export class FeederRepository {
 
   private emit = {
     create: (feeder: feeder) =>
-      this.eventEmitter.emit(FeederEvents.create, feeder),
+      this.eventEmitter.emit(EVENTS.FEEDERS.CREATE, feeder),
     update: (feeder: feeder) =>
-      this.eventEmitter.emit(FeederEvents.update, feeder),
+      this.eventEmitter.emit(EVENTS.FEEDERS.UPDATE, feeder),
     remove: (feeder: feeder) =>
-      this.eventEmitter.emit(FeederEvents.remove, feeder),
+      this.eventEmitter.emit(EVENTS.FEEDERS.REMOVE, feeder),
   };
 
   public get = {
+    one: async (id: string, requestUserId: string) => {
+      return await this.db.feeder.findUnique({
+        where: {
+          id,
+        },
+        select: {
+          id: true,
+          name: true,
+          outputNodeId: true,
+        },
+      });
+    },
     details: async (id: string, requestUserId: string) => {
       const permissions = await this.feederPermissions.getFeederPermissions(
         id,
@@ -120,7 +132,7 @@ export class FeederRepository {
 
       this.emit.create(feeder);
 
-      return feeder;
+      return await this.get.one(feeder.id, data.userId);
     },
   };
 

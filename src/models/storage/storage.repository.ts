@@ -10,10 +10,10 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { STORAGE } from './storage.values';
 import { StorageProcesses } from './storage.processes';
 import { ContentRepository } from 'src/models/content/content.repository';
-import { StorageEvents } from 'src/events/storage.events';
 import { getLocationRegex } from 'src/utils/getLocationRegEx';
 import { AudioProcesses } from 'src/models/audio/audio.processes';
 import { StorageCloud } from './storage.cloud';
+import { EVENTS } from 'src/events/events.names';
 
 @Injectable()
 export class StorageRepository {
@@ -28,7 +28,7 @@ export class StorageRepository {
 
   private emit = {
     update: (storage: storage) =>
-      this.eventEmitter.emit(StorageEvents.update, storage),
+      this.eventEmitter.emit(EVENTS.STORAGE.UPDATE, storage),
   };
 
   public get = {
@@ -110,11 +110,7 @@ export class StorageRepository {
         },
       });
     },
-    file: async (
-      userId: string,
-      locationId: string,
-      file: Express.Multer.File,
-    ) => {
+    file: async (userId: string, path: string, file: Express.Multer.File) => {
       const { originalname, size } = file;
 
       const hasFreeSpace = await this.storageProcesses.verifyFreeSpace(
@@ -123,7 +119,7 @@ export class StorageRepository {
       );
 
       if (hasFreeSpace) {
-        const location = await this.get.locationById(locationId, userId);
+        const location = await this.get.location(userId, path);
         if (location) {
           const encodedFile = await this.audioProcesses.encodeFile(file);
 
