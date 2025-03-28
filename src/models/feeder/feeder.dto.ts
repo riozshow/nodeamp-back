@@ -6,7 +6,10 @@ import {
   IsString,
   MinLength,
   Matches,
+  Length,
+  IsObject,
 } from 'class-validator';
+import { CompiledPermissions } from 'src/auth/group.guard';
 
 export class GetPostsDTO {
   @IsUUID('4')
@@ -101,4 +104,29 @@ export class FeederPostRateDTO {
   @IsPositive()
   @IsNumber()
   rate: number;
+}
+
+export class FeederDataDTO {
+  @Length(1, 30)
+  @IsString()
+  @IsOptional()
+  name: string;
+
+  @IsOptional()
+  label?: {
+    description?: string;
+  };
+
+  @IsOptional()
+  inputNode?: {
+    id?: string;
+  };
+
+  @IsOptional()
+  outputNode?: {
+    id?: string;
+  };
+
+  @IsOptional()
+  permissions: { data: CompiledPermissions };
 }

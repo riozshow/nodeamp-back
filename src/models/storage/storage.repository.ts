@@ -35,9 +35,27 @@ export class StorageRepository {
     storage: async (userId: string) => {
       return await this.db.storage.findUnique({
         where: { userId },
-        include: {
-          locations: true,
-          stats: true,
+        select: {
+          locations: {
+            select: {
+              path: true,
+            },
+          },
+          stats: {
+            select: {
+              used: true,
+              capacity: true,
+            },
+          },
+        },
+      });
+    },
+    space: async (userId: string) => {
+      return await this.db.storage_stats.findUnique({
+        where: { userId },
+        select: {
+          used: true,
+          capacity: true,
         },
       });
     },
@@ -159,7 +177,7 @@ export class StorageRepository {
             newFile,
           );
 
-          this.eventEmitter.emit('storage.updated', userId);
+          this.emit.update({ userId });
 
           return content;
         }
@@ -215,6 +233,8 @@ export class StorageRepository {
           }
         }
       });
+
+      return { updated: true };
     },
   };
 
@@ -242,9 +262,9 @@ export class StorageRepository {
         },
       });
 
-      this.emit.update(storage);
+      this.emit.update({ userId });
 
-      return true;
+      return body;
     },
   };
 }

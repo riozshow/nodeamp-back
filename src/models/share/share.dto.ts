@@ -5,7 +5,7 @@ export class ShareCreateDTO {
   userId: string;
 
   @IsUUID('4')
-  contentId: string;
+  contentId?: string;
 
   @Length(0, 500)
   @IsString()
@@ -28,7 +28,8 @@ export class ShareShareDTO {
 
 export class ShareCreatePayloadDTO {
   @IsUUID('4')
-  contentId: string;
+  @IsOptional()
+  contentId?: string;
 
   @Length(0, 500)
   @IsString()

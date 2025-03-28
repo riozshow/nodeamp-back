@@ -5,6 +5,7 @@ import { ContentProcesses } from './content.processes';
 import { file } from '@prisma/client';
 import { ContentUpdater } from './content.updater';
 import { ContentUpdateDTO } from './content.dto';
+import { EVENTS } from 'src/events/events.names';
 
 @Injectable()
 export class ContentRepository {
@@ -153,6 +154,8 @@ export class ContentRepository {
       const content = await this.db.content.delete({
         where: { id: contentId, userId },
       });
+
+      this.eventEmitter.emit(EVENTS.STORAGE.UPDATE, { userId });
 
       return content;
     },

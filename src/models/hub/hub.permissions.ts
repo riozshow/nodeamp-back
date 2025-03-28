@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { DbService } from 'src/db/db.service';
-import { NodePermmissions } from '../node/node.permissions';
-import { NODE, VISIBLE_NODES } from '../node/node.types';
+import { FeederPermissions } from '../feeder/feeder.permissions';
+import { FeederActions } from '../node/node.actions';
 
 @Injectable()
 export class HubPermissions {
   constructor(
     private db: DbService,
-    private nodePermissions: NodePermmissions,
+    private feederPermissions: FeederPermissions,
   ) {}
 
   getNewSharesInfo({
@@ -27,88 +27,29 @@ export class HubPermissions {
     }
   }
 
-  async getPermittedFeeders(
-    hubId: string,
-    requestUserId: string,
-    isSubscriber?: boolean,
-  ) {
-    const feedersOutputNodes = await this.db.node.findMany({
+  async getPermittedFeeders(hubId: string, requestUserId: string) {
+    const feeders = await this.db.feeder.findMany({
       where: {
         hubId,
-        type: NODE.OUTPUT,
       },
-      select: {
-        id: true,
-        lastShareAt: true,
-        ...(isSubscriber
-          ? {
-              visits: {
-                where: { userId: requestUserId },
-                select: { lastVisitAt: true },
-              },
-            }
-          : {}),
-        feederOutput: {
-          select: {
-            id: true,
-            name: true,
-            outputNodeId: true,
-          },
-        },
-      },
-    });
-
-    const nodesPermissions = await Promise.all(
-      feedersOutputNodes.map(async (node) => ({
-        ...node,
-        permissions: await this.nodePermissions.getNodePermissions(
-          node.id,
-          requestUserId,
-        ),
-      })),
-    ).then((nodes) => nodes.filter((n) => n.permissions.includes('view')));
-
-    return nodesPermissions.map((n) => ({
-      ...n.feederOutput,
-      hasNewShares: this.getNewSharesInfo(n),
-    }));
-  }
-
-  async getPermittedNodes(
-    hubId: string,
-    requestUserId: string,
-    isSubscriber?: boolean,
-  ) {
-    const hubNodes = await this.db.node.findMany({
-      where: { hubId, type: { in: VISIBLE_NODES } },
       select: {
         id: true,
         name: true,
-        type: true,
-        lastShareAt: true,
-        ...(isSubscriber
-          ? {
-              visits: {
-                where: { userId: requestUserId },
-                select: { lastVisitAt: true },
-              },
-            }
-          : {}),
       },
     });
 
-    const nodesWithPermission = await Promise.all(
-      hubNodes.map(async (node) => ({
-        ...node,
-        permissions: await this.nodePermissions.getNodePermissions(
-          node.id,
-          requestUserId,
-        ),
-      })),
+    const permissions = Object.fromEntries(
+      await Promise.all(
+        feeders.map(async (feeder) => [
+          feeder.id,
+          await this.feederPermissions.getFeederPermissions(
+            feeder.id,
+            requestUserId,
+          ),
+        ]),
+      ),
     );
 
-    return nodesWithPermission.filter((node) =>
-      node.permissions.includes('view'),
-    );
+    return feeders.filter((f) => permissions[f.id][FeederActions.view]);
   }
 }

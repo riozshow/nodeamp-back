@@ -8,14 +8,19 @@ import {
   Post,
   Param,
   Delete,
+  Patch,
+  Query,
+  BadRequestException,
 } from '@nestjs/common';
 import { AuthenticatedGuard } from 'src/auth/authenticated.guard';
-import { NewFeeder } from './hub.dto';
+import { RouterUpdate } from './hub.dto';
 import { HubGuard } from 'src/auth/hub.guard';
 import { HubRouter } from './hub.router';
 import { HubRepository } from './hub.repository';
 import { SessionType } from 'src/auth/auth.types';
 import { HubProcesses } from './hub.processes';
+import { FeederDataDTO } from '../feeder/feeder.dto';
+import { NODE_MODELS } from '../node/node.models';
 
 @Controller('hubs')
 export class HubController {
@@ -34,17 +39,120 @@ export class HubController {
     return await this.repository.get.one(hubId, requestUserId);
   }
 
+  @UseGuards(AuthenticatedGuard)
+  @Get(':hubId/settings')
+  async getHubSettingsData(
+    @Param('hubId') hubId: string,
+    @Session() session: SessionType,
+  ) {
+    const requestUserId = session.passport?.user.id;
+    return await this.repository.get.settings(hubId, requestUserId);
+  }
+
+  @UseGuards(new HubGuard({ hubId: 'hubId' }))
+  @UseGuards(AuthenticatedGuard)
+  @Get(':hubId/settings/:entity')
+  async getHubSettings(
+    @Param('hubId') hubId: string,
+    @Session() session: SessionType,
+    @Param('entity') entity: string,
+  ) {
+    const requestUserId = session.passport?.user.id;
+    if (requestUserId) {
+      if (entity === 'routing') {
+        return {
+          ...(await this.repository.get.routerSettings(hubId, requestUserId)),
+          availableNodes: this.processes.getAvailableNodes(),
+        };
+      } else if (entity === 'feeders') {
+        return await this.repository.get.feedersSettings(hubId, requestUserId);
+      }
+    } else {
+      throw new BadRequestException();
+    }
+  }
+
   @UseGuards(new HubGuard({ hubId: 'hubId' }))
   @UseGuards(AuthenticatedGuard)
   @Post(':hubId/feeders')
   async createFeeder(
     @Session() session: SessionType,
     @Param('hubId') hubId: string,
-    @Body() body: NewFeeder,
+    @Body() body: FeederDataDTO,
   ) {
     if (!session.passport?.user.id) throw new NotFoundException();
     const userId = session.passport.user.id;
     return await this.router.createFeeder(hubId, userId, body);
+  }
+
+  @UseGuards(new HubGuard({ hubId: 'hubId' }))
+  @UseGuards(AuthenticatedGuard)
+  @Patch(':hubId/settings/routing')
+  async updateRouter(
+    @Session() session: SessionType,
+    @Param('hubId') hubId: string,
+    @Body() body: RouterUpdate,
+  ) {
+    if (!session.passport?.user.id) throw new NotFoundException();
+    const userId = session.passport.user.id;
+    if (userId) {
+      const status = await this.router.update(hubId, userId, body);
+      if (status.updated) {
+        return {
+          ...(await this.repository.get.routerSettings(hubId, userId)),
+          availableNodes: this.processes.getAvailableNodes(),
+        };
+      }
+    } else {
+      throw new BadRequestException();
+    }
+  }
+
+  @UseGuards(new HubGuard({ hubId: 'hubId' }))
+  @UseGuards(AuthenticatedGuard)
+  @Post(':hubId/settings/routing/position')
+  async saveViewPosition(
+    @Session() session: SessionType,
+    @Param('hubId') hubId: string,
+    @Query('x') x: string,
+    @Query('y') y: string,
+  ) {
+    if (!session.passport?.user.id) throw new NotFoundException();
+    const userId = session.passport.user.id;
+    if (userId) {
+      return this.router.updateViewPosition(
+        hubId,
+        Number(x),
+        Number(y),
+        userId,
+      );
+    } else {
+      throw new BadRequestException();
+    }
+  }
+
+  @UseGuards(new HubGuard({ hubId: 'hubId' }))
+  @UseGuards(AuthenticatedGuard)
+  @Post(':hubId/nodes')
+  async createNode(
+    @Session() session: SessionType,
+    @Param('hubId') hubId: string,
+    @Query('type') type: keyof typeof NODE_MODELS,
+  ) {
+    if (!session.passport?.user.id) throw new NotFoundException();
+    return await this.router.createNode(hubId, type);
+  }
+
+  @UseGuards(new HubGuard({ hubId: 'hubId' }))
+  @UseGuards(AuthenticatedGuard)
+  @Delete(':hubId/nodes/:nodeId')
+  async deleteNode(
+    @Session() session: SessionType,
+    @Param('hubId') hubId: string,
+    @Param('nodeId') nodeId: string,
+  ) {
+    if (!session.passport?.user.id) throw new NotFoundException();
+    return await this.router.deleteNode(hubId, nodeId);
   }
 
   @UseGuards(new HubGuard({ hubId: 'hubId', feederId: 'feederId' }))
@@ -58,6 +166,20 @@ export class HubController {
     if (!session.passport?.user.id) throw new NotFoundException();
     const userId = session.passport.user.id;
     return await this.router.deleteFeeder(hubId, userId, feederId);
+  }
+
+  @UseGuards(new HubGuard({ hubId: 'hubId', feederId: 'feederId' }))
+  @UseGuards(AuthenticatedGuard)
+  @Patch(':hubId/feeders/:feederId')
+  async updateFeeder(
+    @Session() session: SessionType,
+    @Param('hubId') hubId: string,
+    @Param('feederId') feederId: string,
+    @Body() feeder: FeederDataDTO,
+  ) {
+    if (!session.passport?.user.id) throw new NotFoundException();
+    const userId = session.passport.user.id;
+    return await this.router.updateFeeder(hubId, feederId, userId, feeder);
   }
 
   @UseGuards(AuthenticatedGuard)

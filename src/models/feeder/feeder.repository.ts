@@ -2,20 +2,20 @@ import { Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DbService } from 'src/db/db.service';
 import { feeder } from '@prisma/client';
-import { NewFeeder } from 'src/models/hub/hub.dto';
 import { NodeRepository } from '../node/node.repository';
-import { NodeProcesses } from '../node/node.processes';
-import { FeederPermissions } from './feeder.permissions';
 import { EVENTS } from 'src/events/events.names';
+import { FeederDataDTO } from './feeder.dto';
+import { FeederPermissions } from './feeder.permissions';
+import { CompiledPermissions, Permissions } from 'src/auth/group.guard';
+import { NODE_MODELS } from '../node/node.models';
 
 @Injectable()
 export class FeederRepository {
   constructor(
     private db: DbService,
     private nodeRepository: NodeRepository,
-    private nodeProcesses: NodeProcesses,
-    private feederPermissions: FeederPermissions,
     private eventEmitter: EventEmitter2,
+    private feederPermissions: FeederPermissions,
   ) {}
 
   private emit = {
@@ -28,7 +28,7 @@ export class FeederRepository {
   };
 
   public get = {
-    one: async (id: string, requestUserId: string) => {
+    one: async (id: string) => {
       return await this.db.feeder.findUnique({
         where: {
           id,
@@ -36,23 +36,36 @@ export class FeederRepository {
         select: {
           id: true,
           name: true,
-          outputNodeId: true,
         },
       });
     },
-    details: async (id: string, requestUserId: string) => {
-      const permissions = await this.feederPermissions.getFeederPermissions(
-        id,
-        requestUserId,
-      );
-      const feeder = await this.db.feeder.findUnique({
+    edit: async (feederId: string, requestUserId: string) => {
+      return this.db.feeder.findUnique({
+        where: { id: feederId, userId: requestUserId },
+        select: {
+          id: true,
+          name: true,
+          label: {
+            select: {
+              description: true,
+            },
+          },
+          permissions: {
+            select: {
+              data: true,
+            },
+          },
+        },
+      });
+    },
+    details: async (id: string) => {
+      return await this.db.feeder.findUnique({
         where: {
           id,
         },
         select: {
           id: true,
           name: true,
-          outputNodeId: true,
           label: {
             select: {
               description: true,
@@ -69,7 +82,7 @@ export class FeederRepository {
               name: true,
             },
           },
-          connectedHubs: {
+          connectedPorts: {
             select: {
               hub: {
                 select: {
@@ -81,46 +94,52 @@ export class FeederRepository {
           },
         },
       });
-      return { ...feeder, permissions };
     },
-    inputId: async (id: string) =>
-      (
-        await this.db.feeder.findUnique({
-          where: { id },
-          select: { inputNodeId: true },
-        })
-      ).inputNodeId,
+    permissions: async (feederId: string, requestUserId: string) => {
+      const permissions = (await this.db.feeder_permissions.findUnique({
+        where: {
+          feederId,
+          feeder: {
+            userId: requestUserId,
+          },
+        },
+        select: {
+          data: true,
+        },
+      })) as { data: Permissions };
+      return this.feederPermissions.compilePermissions(permissions.data);
+    },
   };
 
   public create = {
-    one: async (hubId: string, data: NewFeeder & { userId: string }) => {
-      const [inputNode, outputNode] = await Promise.all([
-        this.nodeRepository.create.one(
-          hubId,
-          'input',
-          `${data.name} input`,
-          data,
-        ),
-        this.nodeRepository.create.one(
-          hubId,
-          'output',
-          `${data.name} output`,
-          data,
-        ),
-      ]);
+    one: async (hubId: string, data: FeederDataDTO & { userId: string }) => {
+      const node = await this.nodeRepository.create.one(
+        hubId,
+        'shares',
+        `${data.name} shares`,
+      );
 
-      await this.nodeProcesses.connect(inputNode.id, outputNode.id);
+      const permissions = await this.feederPermissions.createPermissions(
+        hubId,
+        data?.permissions?.data ||
+          this.feederPermissions.DEFAULT_PERMISSIONS.PUBLIC,
+      );
 
       const feeder = await this.db.feeder.create({
         data: {
           name: data.name,
           hub: { connect: { id: hubId, userId: data.userId } },
           user: { connect: { id: data.userId } },
+          permissions: {
+            create: {
+              data: permissions,
+            },
+          },
           inputNode: {
-            connect: { id: inputNode.id },
+            connect: { id: node.id },
           },
           outputNode: {
-            connect: { id: outputNode.id },
+            connect: { id: node.id },
           },
           stats: {
             create: {
@@ -128,11 +147,83 @@ export class FeederRepository {
             },
           },
         },
+        select: {
+          id: true,
+          name: true,
+          userId: true,
+          hubId: true,
+          label: {
+            select: {
+              description: true,
+            },
+          },
+          inputNode: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+            },
+          },
+          outputNode: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+            },
+          },
+        },
       });
 
       this.emit.create(feeder);
 
-      return await this.get.one(feeder.id, data.userId);
+      return feeder;
+    },
+  };
+
+  public update = {
+    one: async (
+      feederId: string,
+      requestUserId: string,
+      feeder: FeederDataDTO,
+    ) => {
+      const updatedFeeder = await this.db.feeder.update({
+        where: { id: feederId, userId: requestUserId },
+        data: {
+          name: feeder.name,
+          ...(feeder?.label?.description
+            ? {
+                label: {
+                  upsert: {
+                    create: {
+                      description: feeder.label.description,
+                    },
+                    update: {
+                      description: feeder.label.description,
+                    },
+                    where: {
+                      feederId,
+                    },
+                  },
+                },
+              }
+            : {}),
+        },
+      });
+
+      this.emit.update(updatedFeeder);
+      return updatedFeeder;
+    },
+
+    permissions: async (
+      feederId: string,
+      requestUserId: string,
+      permissions: { data: CompiledPermissions },
+    ) => {
+      return await this.feederPermissions.updatePermissions(
+        feederId,
+        requestUserId,
+        permissions.data,
+      );
     },
   };
 
@@ -145,11 +236,6 @@ export class FeederRepository {
           userId,
         },
       });
-
-      await Promise.all([
-        this.nodeRepository.delete.one(feeder.inputNodeId),
-        this.nodeRepository.delete.one(feeder.outputNodeId),
-      ]);
 
       this.emit.remove(feeder);
 

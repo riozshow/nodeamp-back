@@ -1,7 +1,9 @@
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { EVENTS } from './events.names';
 import { DbService } from 'src/db/db.service';
+import { Injectable } from '@nestjs/common';
 
+@Injectable()
 export class PostEvents {
   constructor(
     private db: DbService,

@@ -2,14 +2,18 @@ import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { JsonValue } from '@prisma/client/runtime/library';
 import { isUUID } from 'class-validator';
-import { NodePermmissions } from 'src/models/node/node.permissions';
-import { NodeActions, NodeTypeActions } from 'src/models/node/node.actions';
+import { FeederActions } from 'src/models/node/node.actions';
+import { FeederPermissions } from 'src/models/feeder/feeder.permissions';
 
 export type Permissions = {
   [key: string]: {
     allow: string[];
     deny: string[];
   };
+};
+
+export type CompiledPermissions = {
+  [key: string]: string[];
 };
 
 export type NodePermissionsType = {
@@ -31,87 +35,40 @@ export class GroupGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const { user, params, query, sessionStore } = request;
     const { prisma } = sessionStore as { prisma: PrismaClient };
-    const { nodeId: nodeIdInput, feederId: feederIdInput } =
-      this.permissionSource;
 
+    const { feederId: feederIdInput } = this.permissionSource;
     const feederId = params[feederIdInput] || query[feederIdInput];
-    const nodeId = params[nodeIdInput] || query[nodeIdInput];
 
-    let feeder: null | {
-      inputNode?: NodePermissionsType;
-      outputNode?: NodePermissionsType;
-    } = null;
-
-    let node: null | NodePermissionsType = null;
+    let feeder: null | NodePermissionsType = null;
 
     if (feederId && isUUID(feederId)) {
-      if (NodeTypeActions.input.includes(this.action)) {
+      if (Object.values(FeederActions).includes(this.action)) {
         feeder = await prisma.feeder.findUnique({
           where: { id: feederId },
           select: {
-            inputNode: {
+            hub: { select: { userId: true, id: true } },
+            permissions: {
               select: {
-                hub: { select: { userId: true, id: true } },
-                permissions: {
-                  select: {
-                    data: true,
-                  },
-                },
+                data: true,
               },
             },
           },
         });
-      } else if (NodeTypeActions.output.includes(this.action)) {
-        feeder = await prisma.feeder.findUnique({
-          where: { id: feederId },
-          select: {
-            outputNode: {
-              select: {
-                hub: { select: { userId: true, id: true } },
-                permissions: {
-                  select: {
-                    data: true,
-                  },
-                },
-              },
-            },
-          },
-        });
-      }
-      node = feeder.inputNode || feeder.outputNode;
-    }
 
-    if (!node) {
-      if (nodeId && isUUID(nodeId)) {
-        node = await prisma.node.findUnique({
-          where: { id: nodeId },
-          select: {
-            hub: { select: { id: true, userId: true } },
-            permissions: { select: { data: true } },
-          },
-        });
-      }
-    }
+        if (!feeder) {
+          return false;
+        }
 
-    if (node) {
-      if (user?.id === node.hub.userId) return true;
-
-      const userGroupsIds = await NodePermmissions.getUserGroupsIdsByHubId(
-        prisma,
-        user.id,
-        node.hub.id,
-      );
-
-      const permissions = node.permissions.data as Permissions;
-
-      if (
-        !!NodePermmissions.getValidatedNodeActions(
+        if (user?.id === feeder?.hub?.userId) return true;
+        const permissions = feeder.permissions.data as Permissions;
+        const requestedAction = await FeederPermissions.areActionsPermitted(
+          prisma,
           [this.action],
-          userGroupsIds,
+          user.id,
           permissions,
-        )
-      ) {
-        return true;
+          user.id === feeder?.hub?.userId,
+        );
+        return requestedAction[this.action];
       }
     }
 

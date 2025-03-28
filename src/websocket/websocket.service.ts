@@ -11,7 +11,7 @@ import { randomBytes } from 'crypto';
   cors: 'http://localhost:5173',
 })
 export class WebsocketService {
-  private clients: { [key: string]: Socket | boolean } = {};
+  private clients: { [key: string]: { [key: string]: Socket | boolean } } = {};
 
   @WebSocketServer()
   server: Server;
@@ -21,14 +21,15 @@ export class WebsocketService {
     client: Socket,
     { userId, key }: { userId: string; key: string },
   ) {
-    if (this.clients[`${userId}@${key}`]) {
-      this.clients[`${userId}@${key}`] = client;
+    if (typeof this.clients[userId][key] === 'boolean') {
+      this.clients[userId][key] = client;
       client.on('close', () => {
-        delete this.clients[`${userId}@${key}`];
+        delete this.clients[userId][key];
+        if (!Object.keys(this.clients[userId]).length) {
+          delete this.clients[userId];
+        }
       });
     }
-    //console.clear();
-    //console.log(`Websocket clients: ${Object.keys(this.clients).length}`);
   }
 
   emit(message: string, body: any) {
@@ -36,22 +37,24 @@ export class WebsocketService {
   }
 
   emitTo(usersIds: string[], message: string, body: any) {
-    const clientKeys = Object.keys(this.clients);
     usersIds.forEach((userId) => {
-      const keys = clientKeys.filter((key) => key.startsWith(userId));
-      if (!!keys.length) {
-        keys.forEach((clientKey) => {
-          if (typeof this.clients[clientKey] !== 'boolean') {
-            this.clients[clientKey].emit(message, body);
+      if (this.clients[userId]) {
+        for (const key in this.clients[userId]) {
+          if (typeof this.clients[userId][key] !== 'boolean') {
+            this.clients[userId][key].emit(message, body);
           }
-        });
+        }
       }
     });
   }
 
   async generateUserKey(userId: string) {
-    let key: string = await randomBytes(24).toString('base64');
-    this.clients[`${userId}@${key}`] = true;
+    const key: string = await randomBytes(12).toString('base64');
+    if (this.clients[userId]) {
+      this.clients[userId] = { ...this.clients[userId], [key]: true };
+    } else {
+      this.clients[userId] = { [key]: true };
+    }
     return key;
   }
 }

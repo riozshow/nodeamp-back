@@ -1,35 +1,40 @@
 import { Injectable } from '@nestjs/common';
 import { DbService } from 'src/db/db.service';
 import { OnEvent } from '@nestjs/event-emitter';
-import { share } from '@prisma/client';
+import { feeder, share } from '@prisma/client';
 import { FeederProcesses } from '../models/feeder/feeder.processes';
 import { EVENTS } from './events.names';
+import { WebsocketService } from 'src/websocket/websocket.service';
 
 @Injectable()
 export class FeederEvents {
   constructor(
     private db: DbService,
     private processes: FeederProcesses,
+    private ws: WebsocketService,
   ) {}
 
-  @OnEvent(EVENTS.SHARES.UPDATE)
-  @OnEvent(EVENTS.SHARES.ACCEPT)
+  @OnEvent(EVENTS.SHARES.MOVE)
   @OnEvent(EVENTS.SHARES.REMOVE)
-  async handleFeederTagsChange({ id }: share) {
-    const shares = await this.db.share.findMany({
-      where: { id, acceptedAt: { not: null } },
+  async changeTagsOnShareMove({ id }: share) {
+    const share = await this.db.share.findUnique({
+      where: { id },
       select: {
-        nodeId: true,
+        node: {
+          select: {
+            outputFeederId: true,
+          },
+        },
       },
     });
 
-    const feeders = await this.db.feeder.findMany({
-      where: { outputNodeId: { in: shares.map((s) => s.nodeId) } },
-      select: { id: true },
-    });
+    if (share.node.outputFeederId) {
+      await this.processes.refreshFeederTags(share.node.outputFeederId);
+    }
+  }
 
-    await Promise.all(
-      feeders.map((feeder) => this.processes.refreshFeederTags(feeder.id)),
-    );
+  @OnEvent(EVENTS.FEEDERS.UPDATE)
+  async updateFeeder(feeder: feeder) {
+    this.ws.emitTo([feeder.userId], `feeder.details.update.${feeder.id}`, true);
   }
 }

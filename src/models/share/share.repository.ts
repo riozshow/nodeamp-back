@@ -1,6 +1,5 @@
-import { forwardRef, Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { DbService } from 'src/db/db.service';
-import { FeederRepository } from 'src/models/feeder/feeder.repository';
 import { PostRepository } from 'src/models/post/post.repository';
 import { ShareCreateDTO, ShareShareDTO } from './share.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -13,8 +12,6 @@ export class ShareRepository {
   constructor(
     private db: DbService,
     private eventEmitter: EventEmitter2,
-    @Inject(forwardRef(() => FeederRepository))
-    private feederRepository: FeederRepository,
   ) {}
 
   static PAGE_SIZE = 5;
@@ -39,8 +36,6 @@ export class ShareRepository {
       this.eventEmitter.emit(EVENTS.SHARES.UPDATE, share),
     remove: (share: share) =>
       this.eventEmitter.emit(EVENTS.SHARES.REMOVE, share),
-    accept: (share: share) =>
-      this.eventEmitter.emit(EVENTS.SHARES.ACCEPT, share),
     reject: (share: share) =>
       this.eventEmitter.emit(EVENTS.SHARES.REJECT, share),
     move: (share: share) => this.eventEmitter.emit(EVENTS.SHARES.MOVE, share),
@@ -49,15 +44,14 @@ export class ShareRepository {
   public get = {
     byFeederId: async (
       feederId: string,
-      skip: number,
       requestUserId?: string,
+      lastShareId?: string,
     ) => {
       return await this.db.share.findMany({
         where: {
           node: {
             feederOutput: { id: feederId },
           },
-          acceptedAt: { not: null },
         },
         select: {
           ...ShareRepository.NODE_SHARE_SELECT,
@@ -69,43 +63,22 @@ export class ShareRepository {
           },
         },
         take: ShareRepository.PAGE_SIZE,
-        skip,
+        cursor: { id: lastShareId },
         orderBy: {
-          acceptedAt: 'desc',
+          sharedAt: 'desc',
         },
       });
     },
-    byNodeId: async (nodeId: string, skip: number, requestUserId?: string) => {
-      return await this.db.share.findMany({
-        where: {
-          nodeId,
-          acceptedAt: { not: null },
-        },
-        select: {
-          ...ShareRepository.NODE_SHARE_SELECT,
-          comments: {
-            where: { userId: requestUserId },
-          },
-          likes: {
-            where: { userId: requestUserId },
-          },
-        },
-        take: ShareRepository.PAGE_SIZE,
-        skip,
-        orderBy: {
-          acceptedAt: 'desc',
-        },
-      });
-    },
-    lastByNodeId: async (
+    byNodeId: async (
       nodeId: string,
-      lastShareId: string,
       requestUserId?: string,
+      lastShareId?: string,
     ) => {
       return await this.db.share.findMany({
         where: {
-          nodeId,
-          acceptedAt: { not: null },
+          node: {
+            id: nodeId,
+          },
         },
         select: {
           ...ShareRepository.NODE_SHARE_SELECT,
@@ -116,27 +89,16 @@ export class ShareRepository {
             where: { userId: requestUserId },
           },
         },
-        take: ShareRepository.PAGE_SIZE * -1,
-        skip: 1,
+        take: ShareRepository.PAGE_SIZE,
         cursor: { id: lastShareId },
         orderBy: {
-          acceptedAt: 'desc',
+          sharedAt: 'desc',
         },
       });
     },
   };
 
   public update = {
-    accept: async (shareId: string) => {
-      const share = await this.db.share.update({
-        where: { id: shareId },
-        data: {
-          acceptedAt: getCurrentDate(),
-        },
-      });
-      this.emit.accept(share);
-      return share;
-    },
     pin: async (shareId: string) => {
       const share = await this.db.share.update({
         where: { id: shareId },
@@ -151,7 +113,7 @@ export class ShareRepository {
         where: { id: shareId },
         data: {
           nodeId,
-          updatedAt: getCurrentDate(),
+          sharedAt: getCurrentDate(),
         },
       });
       this.emit.move(share);
@@ -161,20 +123,23 @@ export class ShareRepository {
 
   public create = {
     inFeeder: async (feederId: string, post: ShareCreateDTO) => {
-      const inputNodeId = await this.feederRepository.get.inputId(feederId);
       const share = await this.db.share.create({
         data: {
           node: {
             connect: {
-              id: inputNodeId,
+              inputFeederId: feederId,
             },
           },
           post: {
             create: {
               message: post.message,
-              content: {
-                connect: { id: post.contentId, userId: post.userId },
-              },
+              ...(post.contentId
+                ? {
+                    content: {
+                      connect: { id: post.contentId, userId: post.userId },
+                    },
+                  }
+                : {}),
               creatorFeeder: {
                 connect: { id: feederId },
               },
@@ -195,7 +160,6 @@ export class ShareRepository {
       sourceFeederId: string,
       share: ShareShareDTO,
     ) => {
-      const inputNodeId = await this.feederRepository.get.inputId(feederId);
       const post = await this.db.post.findFirst({
         where: {
           shares: {
@@ -211,7 +175,7 @@ export class ShareRepository {
           data: {
             node: {
               connect: {
-                id: inputNodeId,
+                inputFeederId: feederId,
               },
             },
             post: {
@@ -253,11 +217,21 @@ export class ShareRepository {
       this.emit.remove(share);
       return share;
     },
-    reject: async (shareId: string) => {
+    one: async (shareId: string) => {
       const share = await this.db.share.delete({
         where: { id: shareId },
       });
       this.emit.reject(share);
+      return share;
+    },
+    own: async (shareId: string, userId: string) => {
+      const share = await this.db.share.delete({
+        where: {
+          id: shareId,
+          userId,
+        },
+      });
+      this.emit.remove(share);
       return share;
     },
   };

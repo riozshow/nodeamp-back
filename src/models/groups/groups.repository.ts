@@ -10,31 +10,40 @@ export const DefaultGroups = {
 export class GroupsRepository {
   constructor(private db: DbService) {}
 
-  async createHubDefaultUsersGroups(hubId: string) {
-    return await this.db.hub_user_group.createMany({
-      data: [
-        {
-          hubId,
+  async createHubDefaultUsersGroups(hubId: string, userId: string) {
+    return await Promise.all([
+      this.db.user_group.create({
+        data: {
           type: 'blocked',
           name: DefaultGroups.blocked,
+          user: {
+            connect: {
+              id: userId,
+            },
+          },
+          hub: {
+            connect: {
+              id: hubId,
+            },
+          },
         },
-        {
-          hubId,
+      }),
+      this.db.user_group.create({
+        data: {
           type: 'subscribers',
           name: DefaultGroups.subscribers,
+          user: {
+            connect: {
+              id: userId,
+            },
+          },
+          hub: {
+            connect: {
+              id: hubId,
+            },
+          },
         },
-      ],
-    });
-  }
-
-  async createHubDefaultFeedersGroups(hubId: string) {
-    return await this.db.hub_feeder_group.createMany({
-      data: [
-        {
-          hubId,
-          name: 'All external feeders',
-        },
-      ],
-    });
+      }),
+    ]);
   }
 }

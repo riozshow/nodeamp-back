@@ -6,7 +6,6 @@ import { NodeProcesses } from 'src/models/node/node.processes';
 import { EVENTS } from './events.names';
 import { DbService } from 'src/db/db.service';
 import { getCurrentDate } from 'src/utils/getCurrentDate';
-import { VISIBLE_NODES } from 'src/models/node/node.types';
 
 @Injectable()
 export class NodeEvents {
@@ -15,6 +14,33 @@ export class NodeEvents {
     private processes: NodeProcesses,
     private db: DbService,
   ) {}
+
+  async getSubscribersIdsByNodeId(nodeId: string, skipUserId: string) {
+    return await this.db.user_group_member
+      .findMany({
+        where: {
+          userId: { not: skipUserId },
+          group: {
+            type: 'subscriptions',
+            hub: {
+              nodes: {
+                every: {
+                  feederOutput: {
+                    outputNode: {
+                      id: nodeId,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        select: {
+          userId: true,
+        },
+      })
+      .then((subs) => subs.map((sub) => sub.userId));
+  }
 
   @OnEvent(EVENTS.RATES.CREATE)
   async checkRatedPost(rate: { shareId: string; nodeId: string }) {
@@ -31,65 +57,30 @@ export class NodeEvents {
   @OnEvent(EVENTS.SHARES.MOVE)
   async emitNewPost(share: share) {
     const date = getCurrentDate();
-    await this.db.node.update({
-      where: { id: share.nodeId },
-      data: { lastShareAt: date },
-    });
-    const subscriptions = await this.db.hub_subscriptions.findMany({
-      where: {
-        hub: {
-          nodes: { every: { type: { in: VISIBLE_NODES }, id: share.nodeId } },
-        },
-      },
-      select: {
-        userId: true,
-      },
-    });
 
-    let usersIds = subscriptions.map((s) => s.userId);
-    if (!usersIds.includes(share.userId)) {
-      usersIds = [...usersIds, share.userId];
-    }
+    const subscriptions = await this.getSubscribersIdsByNodeId(
+      share.nodeId,
+      share.userId,
+    );
 
-    this.ws.emitTo(usersIds, `node.shares.create.${share.nodeId}`, date);
+    this.ws.emitTo(
+      [...subscriptions, share.userId],
+      `node.shares.create.${share.nodeId}`,
+      date,
+    );
   }
 
   @OnEvent(EVENTS.SHARES.REMOVE)
   async emitRemovePost(share: share) {
-    const subscriptions = await this.db.hub_subscriptions.findMany({
-      where: {
-        hub: {
-          nodes: { every: { type: { in: VISIBLE_NODES }, id: share.nodeId } },
-        },
-      },
-      select: {
-        userId: true,
-      },
-    });
+    const subscriptions = await this.getSubscribersIdsByNodeId(
+      share.nodeId,
+      share.userId,
+    );
 
-    let usersIds = subscriptions.map((s) => s.userId);
-    if (!usersIds.includes(share.userId)) {
-      usersIds = [...usersIds, share.userId];
-    }
-
-    this.ws.emitTo(usersIds, `node.shares.remove.${share.nodeId}`, share.id);
-  }
-
-  @OnEvent(EVENTS.NODES.VISIT)
-  async updateVisit(visit: { userId: string; nodeId: string }) {
-    const { userId, nodeId } = visit;
-    const lastVisitAt = getCurrentDate();
-    await this.db.node_visit.upsert({
-      where: { userId_nodeId: { userId, nodeId } },
-      create: {
-        user: { connect: { id: userId } },
-        node: { connect: { id: nodeId } },
-        lastVisitAt,
-      },
-      update: {
-        lastVisitAt,
-        visitCount: { increment: 1 },
-      },
-    });
+    this.ws.emitTo(
+      [...subscriptions, share.userId],
+      `node.shares.remove.${share.nodeId}`,
+      share.id,
+    );
   }
 }

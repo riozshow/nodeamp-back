@@ -28,6 +28,13 @@ export class StorageController {
   }
 
   @UseGuards(AuthenticatedGuard)
+  @Get('space')
+  async getSpace(@Session() session: SessionType) {
+    const userId = session.passport?.user.id;
+    return await this.repository.get.space(userId);
+  }
+
+  @UseGuards(AuthenticatedGuard)
   @Post('upload')
   async uploadFile(
     @Session() session: SessionType,

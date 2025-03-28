@@ -41,3 +41,7 @@ export class NewFeeder {
   @IsOptional()
   comment?: string[];
 }
+
+export class RouterUpdate {
+  [nodeId: string]: { [property: string]: unknown };
+}

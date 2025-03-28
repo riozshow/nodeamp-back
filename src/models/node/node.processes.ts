@@ -3,7 +3,7 @@ import { DbService } from 'src/db/db.service';
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ShareStatusData } from '../share/share.types';
-import { NODE, ShareStatus } from './node.types';
+import { ShareStatus } from './node.types';
 import { ShareRepository } from '../share/share.repository';
 
 @Injectable()
@@ -69,18 +69,6 @@ export class NodeProcesses {
     });
 
     switch (share.node.type) {
-      case NODE.INPUT: {
-        status = { ...(await this.shareStatus.ofInputNode(share)), ...status };
-        break;
-      }
-      case NODE.OUTPUT: {
-        status = { ...(await this.shareStatus.ofOutputNode(share)), ...status };
-        break;
-      }
-      case NODE.RATER: {
-        status = { ...(await this.shareStatus.ofRaterNode(share)), ...status };
-        break;
-      }
     }
 
     return status;
@@ -92,7 +80,7 @@ export class NodeProcesses {
       return { moveTo: targetNodeId };
     },
     ofOutputNode: (share: ShareStatusData) => {
-      return { isAccepted: true };
+      return {};
     },
     ofRaterNode: (share: ShareStatusData) => {
       return {};
@@ -100,18 +88,14 @@ export class NodeProcesses {
   };
 
   async executeShareStatus(status: ShareStatus) {
-    const { shareId, isRejected, isAccepted, moveTo } = status;
+    const { shareId, isRejected, moveTo } = status;
 
     if (moveTo) {
       return await this.shareRepository.update.moveTo(shareId, moveTo);
     }
 
     if (isRejected) {
-      return await this.shareRepository.delete.reject(shareId);
-    }
-
-    if (isAccepted) {
-      return await this.shareRepository.update.accept(shareId);
+      return await this.shareRepository.delete.one(shareId);
     }
   }
 }

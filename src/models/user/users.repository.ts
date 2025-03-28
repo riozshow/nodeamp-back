@@ -12,7 +12,6 @@ export class UsersRepository {
     private db: DbService,
     private hubRepository: HubRepository,
     private storageRepository: StorageRepository,
-    private eventEmitter: EventEmitter2,
     private usersProcesses: UsersProcesses,
   ) {}
 
@@ -85,7 +84,6 @@ export class UsersRepository {
       const hub = await this.hubRepository.create.one(user.id, userData.name);
       await this.usersProcesses.connectProfileHub(user.id, hub.id);
 
-      //this.eventEmitter.emit('user.created', user);
       return user;
     },
   };

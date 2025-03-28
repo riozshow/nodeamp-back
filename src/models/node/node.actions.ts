@@ -1,8 +1,8 @@
-export type NodeActionType = {
+export type FeederActionType = {
   [key: string]: string;
 };
 
-export const NodeActions = {
+export const FeederActions = {
   view: 'user_group_post_view',
   rate: 'user_group_post_rate',
   share: 'user_group_post_share',
@@ -11,13 +11,13 @@ export const NodeActions = {
   comment: 'user_group_post_comment',
 };
 
-export const NodeTypeActions = {
-  input: [NodeActions.create],
+export const FeederTypeActions = {
+  input: [FeederActions.create],
   output: [
-    NodeActions.view,
-    NodeActions.share,
-    NodeActions.remove,
-    NodeActions.comment,
+    FeederActions.view,
+    FeederActions.share,
+    FeederActions.remove,
+    FeederActions.comment,
   ],
-  rater: [NodeActions.view, NodeActions.rate, NodeActions.remove],
+  rater: [FeederActions.view, FeederActions.rate, FeederActions.remove],
 };

@@ -4,7 +4,6 @@ export const EVENTS = {
     COMMENT: 'share.comment',
     CREATE: 'share.create',
     UPDATE: 'share.update',
-    ACCEPT: 'share.accept',
     REJECT: 'share.reject',
     REMOVE: 'share.remove',
     UNLIKE: 'share.unlike',

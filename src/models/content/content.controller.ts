@@ -9,9 +9,10 @@ import {
   Body,
   Param,
   Put,
+  Patch,
 } from '@nestjs/common';
 import { AuthenticatedGuard } from 'src/auth/authenticated.guard';
-import { ContentUpdateDTO } from './content.dto';
+import { ContentPatchDTO, ContentUpdateDTO } from './content.dto';
 import { SessionType } from 'src/auth/auth.types';
 import { StorageRepository } from 'src/models/storage/storage.repository';
 import { ContentRepository } from './content.repository';
@@ -62,6 +63,20 @@ export class ContentController {
   ) {
     const userId = session.passport?.user.id;
     return await this.contentRepository.update.one(userId, body);
+  }
+
+  @UseGuards(AuthenticatedGuard)
+  @Patch(':contentId')
+  async patchContent(
+    @Session() session: SessionType,
+    @Body() body: ContentPatchDTO,
+    @Param('contentId') contentId: string,
+  ) {
+    const userId = session.passport?.user.id;
+    return await this.contentRepository.update.one(userId, {
+      id: contentId,
+      ...body,
+    });
   }
 
   @UseGuards(AuthenticatedGuard)
