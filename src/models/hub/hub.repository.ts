@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { DbService } from 'src/db/db.service';
 import { HubPermissions } from './hub.permissions';
 import { GroupsRepository } from 'src/models/groups/groups.repository';
@@ -10,7 +10,6 @@ export class HubRepository {
   constructor(
     private db: DbService,
     private hubPermissions: HubPermissions,
-    private feederPermissions: FeederPermissions,
     private groups: GroupsRepository,
     private router: HubRouter,
   ) {}
@@ -26,18 +25,14 @@ export class HubRepository {
           id: true,
         },
       });
+
       await this.groups.createHubDefaultUsersGroups(hub.id, userId);
 
       const feeder = await this.router.createFeeder(hub.id, userId, {
         name: `${name} main`,
-        permissions: {
-          data: {
-            view: ['*'],
-            comment: ['*'],
-            share: ['*'],
-          },
-        },
+        permissions: FeederPermissions.DEFAULT_PERMISSIONS.PUBLIC,
       });
+
       await this.router.setDefaultFeeder(hub.id, userId, feeder.id);
       return await this.get.one(hub.id, userId);
     },
@@ -51,18 +46,19 @@ export class HubRepository {
           id: true,
           name: true,
           userId: true,
-          defaultFeederId: true,
-          groups: {
-            where: {
-              type: 'subscribers',
-              userId: requestUserId,
-            },
-            select: { _count: true },
-          },
         },
       });
 
+      if (!hub) {
+        throw new NotFoundException();
+      }
+
       const feeders = await this.hubPermissions.getPermittedFeeders(
+        hubId,
+        requestUserId,
+      );
+
+      const ports = await this.hubPermissions.getPermittedPorts(
         hubId,
         requestUserId,
       );
@@ -71,9 +67,8 @@ export class HubRepository {
         id: hub.id,
         userId: hub.userId,
         name: hub.name,
-        subscribes: !!hub.groups.length,
-        defaultFeederId: hub.defaultFeederId,
         feeders,
+        ports,
         configurable: hub.userId === requestUserId,
       };
     },
@@ -88,6 +83,7 @@ export class HubRepository {
             select: {
               id: true,
               name: true,
+              isDefault: true,
             },
           },
           nodes: {
@@ -113,19 +109,12 @@ export class HubRepository {
               },
             },
           },
-          defaultFeederId: true,
           groups: {
             where: { type: { not: 'blocked' } },
             select: {
               id: true,
               name: true,
               type: true,
-            },
-          },
-          ports: {
-            select: {
-              id: true,
-              name: true,
             },
           },
         },
@@ -138,16 +127,11 @@ export class HubRepository {
         select: {
           id: true,
           name: true,
-          position: {
-            select: {
-              x: true,
-              y: true,
-            },
-          },
           feeders: {
             select: {
               id: true,
               name: true,
+              isDefault: true,
             },
           },
           nodes: {
@@ -175,19 +159,12 @@ export class HubRepository {
               },
             },
           },
-          defaultFeederId: true,
           groups: {
             where: { type: { not: 'blocked' } },
             select: {
               id: true,
               name: true,
               type: true,
-            },
-          },
-          ports: {
-            select: {
-              id: true,
-              name: true,
             },
           },
         },
@@ -204,11 +181,7 @@ export class HubRepository {
             select: {
               id: true,
               name: true,
-              label: {
-                select: {
-                  description: true,
-                },
-              },
+              isDefault: true,
               inputNode: {
                 select: {
                   id: true,
@@ -234,7 +207,6 @@ export class HubRepository {
               outputFeederId: true,
             },
           },
-          defaultFeederId: true,
           groups: {
             where: { type: { not: 'blocked' } },
             select: {

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { StorageController } from './storage.controller';
 import { DbModule } from 'src/db/db.module';
 import { ContentModule } from 'src/models/content/content.module';
@@ -10,7 +10,11 @@ import { AudioModule } from 'src/models/audio/audio.module';
 @Module({
   controllers: [StorageController],
   providers: [StorageRepository, StorageCloud, StorageProcesses],
-  imports: [DbModule, ContentModule, AudioModule],
+  imports: [
+    DbModule,
+    forwardRef(() => ContentModule),
+    forwardRef(() => AudioModule),
+  ],
   exports: [StorageRepository],
 })
 export class StorageModule {}

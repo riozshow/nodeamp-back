@@ -1,6 +1,6 @@
 generator client {
   provider        = "prisma-client-js"
-  previewFeatures = ["postgresqlExtensions", "views"]
+  previewFeatures = ["postgresqlExtensions", "strictUndefinedChecks", "views"]
 }
 
 datasource db {
@@ -28,23 +28,20 @@ model user {
   name     String    @unique
   password password?
 
-  profileHubId String? @unique @db.Uuid
-  profileHub   hub?    @relation(name: "profile_hub", fields: [profileHubId], references: [id])
-
-  label             user_label?
-  storage           storage?
-  hubs              hub[]
-  feeders           feeder[]
-  rates             content_rate[]
-  contents          content[]
-  posts             post[]
-  images            user_image[]
-  likes             content_like[]
-  comments          content_comment[]
-  shares            share[]
-  node_visits       node_visit[]
-  user_group        user_group[]
-  user_group_member user_group_member[]
+  label         user_label?
+  storage       storage?
+  hubs          hub[]
+  feeders       feeder[]
+  rates         content_rate[]
+  contents      content[]
+  posts         post[]
+  images        user_image[]
+  likes         content_like[]
+  comments      content_comment[]
+  shares        share[]
+  node_visits   node_visit[]
+  createdGroups user_group[]
+  joinedGroups  user_group_member[]
 }
 
 model user_label {
@@ -76,22 +73,35 @@ model node {
   hubId String @db.Uuid
   hub   hub    @relation(fields: [hubId], references: [id], onDelete: Cascade)
 
-  feederInput  feeder? @relation("input_node", fields: [inputFeederId], references: [id])
-  feederOutput feeder? @relation("output_node", fields: [outputFeederId], references: [id])
+  feederInput  feeder? @relation("input_node", fields: [inputFeederId], references: [id], onDelete: SetNull)
+  feederOutput feeder? @relation("output_node", fields: [outputFeederId], references: [id], onDelete: SetNull)
 
   inputFeederId  String? @unique @db.Uuid
   outputFeederId String? @unique @db.Uuid
 
-  shares share[]
-  rates  content_rate[]
-
   targetNodes node_connections[] @relation(name: "source_node")
   sourceNodes node_connections[] @relation(name: "target_node")
+
+  rates content_rate[]
 
   lastShareAt DateTime?
   visits      node_visit[]
 
-  config node_config?
+  config    node_config?
+  locations node_location[]
+}
+
+model node_location {
+  id String @id @default(uuid()) @db.Uuid
+
+  node   node   @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  nodeId String @db.Uuid
+
+  shares share[]
+
+  path String @default("/") @db.Citext
+
+  @@unique([nodeId, path])
 }
 
 model node_config {
@@ -135,8 +145,9 @@ model node_position {
 model feeder {
   id String @unique @default(uuid()) @db.Uuid
 
-  name  String
-  label label_feeder?
+  name String
+
+  isDefault Boolean?
 
   userId String @db.Uuid
   user   user   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -147,32 +158,45 @@ model feeder {
   inputNode  node? @relation(name: "input_node")
   outputNode node? @relation(name: "output_node")
 
-  connectedPorts port[]
-  permissions    feeder_permissions?
+  stats        feeder_stats?
+  permissions  feeder_permission[]
+  createdPosts post[]
+  ports        port_feeder[]
 
-  stats feeder_stats?
-  tags  feeder_tag[]
-
-  createdPosts     post[]
-  port_connections port_connections[]
+  @@unique([isDefault, hubId])
 }
 
-model feeder_permissions {
-  feederId String @unique @db.Uuid
+enum PermissionType {
+  user_group_post_view
+  user_group_post_rate
+  user_group_post_share
+  user_group_post_create
+  user_group_post_remove
+  user_group_post_comment
+}
+
+model feeder_permission {
+  id String @unique @default(uuid()) @db.Uuid
+
+  type PermissionType
+  open Boolean        @default(false)
+
   feeder   feeder @relation(fields: [feederId], references: [id], onDelete: Cascade)
+  feederId String @db.Uuid
 
-  data Json
+  groups feeder_permission_group[]
+
+  @@unique([feederId, type])
 }
 
-model feeder_tag {
-  feeder feeder @relation(fields: [feederId], references: [id], onDelete: Cascade)
-  tag    tag    @relation(fields: [name], references: [name], onDelete: Cascade)
+model feeder_permission_group {
+  group   user_group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId String     @db.Uuid
 
-  feederId String @db.Uuid
-  name     String
-  count    Int
+  permission   feeder_permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  permissionId String            @db.Uuid
 
-  @@unique([feederId, name])
+  @@unique([groupId, permissionId])
 }
 
 model feeder_stats {
@@ -182,65 +206,81 @@ model feeder_stats {
   postsCount Int
 }
 
-model label_feeder {
-  description String?
-
-  feeder   feeder @relation(fields: [feederId], references: [id], onDelete: Cascade)
-  feederId String @unique @db.Uuid
-}
-
 model hub {
   id String @id @default(uuid()) @db.Uuid
-
-  name String
 
   user   user   @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId String @db.Uuid
 
-  profile user? @relation(name: "profile_hub")
+  isDefault Boolean?
 
-  defaultFeederId String? @db.Uuid
+  name String
 
   feeders feeder[]
-  nodes   node[]
   ports   port[]
+  nodes   node[]
   groups  user_group[]
-
-  position hub_position?
 }
 
-model hub_position {
-  hub   hub    @relation(fields: [hubId], references: [id], onDelete: Cascade)
-  hubId String @unique @db.Uuid
-
-  x Int
-  y Int
+enum PortMode {
+  SEND
+  RECIEVE
 }
 
 model port {
   id String @id @default(uuid()) @db.Uuid
 
-  name String @db.Citext
+  name        String  @db.Citext
+  description String?
 
-  hub   hub    @relation(fields: [hubId], references: [id])
+  isDefault Boolean?
+
+  mode PortMode
+
+  open     Boolean @default(true)
+  readonly Boolean @default(false)
+
   hubId String @db.Uuid
+  hub   hub    @relation(fields: [hubId], references: [id], onDelete: Cascade)
 
-  feeder   feeder @relation(fields: [feederId], references: [id])
-  feederId String @db.Uuid
+  groups           port_group[]
+  connectedFeeders port_feeder[]
 
-  connections port_connections[]
+  recievers port_subscriptions[] @relation(name: "sender_port")
+  senders   port_subscriptions[] @relation(name: "reciever_port")
 
-  @@unique([hubId, name, feederId])
+  @@unique([name, hubId])
+  @@unique([isDefault, hubId])
 }
 
-model port_connections {
-  port   port   @relation(fields: [portId], references: [id], onDelete: Cascade)
+model port_group {
+  group user_group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  port  port       @relation(fields: [portId], references: [id], onDelete: Cascade)
+
+  groupId String @db.Uuid
+  portId  String @db.Uuid
+
+  @@unique([groupId, portId])
+}
+
+model port_subscriptions {
+  recieverPort port @relation(name: "reciever_port", fields: [recieverPortId], references: [id], onDelete: Cascade)
+  senderPort   port @relation(name: "sender_port", fields: [senderPortId], references: [id], onDelete: Cascade)
+
+  recieverPortId String @db.Uuid
+  senderPortId   String @db.Uuid
+
+  @@unique([recieverPortId, senderPortId])
+}
+
+model port_feeder {
   feeder feeder @relation(fields: [feederId], references: [id], onDelete: Cascade)
+  port   port   @relation(fields: [portId], references: [id], onDelete: Cascade)
 
-  portId   String @db.Uuid
   feederId String @db.Uuid
+  portId   String @db.Uuid
 
-  @@unique([portId, feederId])
+  @@unique([feederId, portId])
 }
 
 model user_group {
@@ -256,7 +296,9 @@ model user_group {
   hubId String? @db.Uuid
   hub   hub?    @relation(fields: [hubId], references: [id], onDelete: Cascade)
 
-  users user_group_member[]
+  users              user_group_member[]
+  port_group         port_group[]
+  feeder_permissions feeder_permission_group[]
 
   @@unique([userId, hubId, name])
 }
@@ -285,6 +327,9 @@ model post {
   contentId String?  @db.Uuid
   content   content? @relation(fields: [contentId], references: [id], onDelete: Cascade)
 
+  locationId String?   @db.Uuid
+  location   location? @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
   shares share[]
 
   createdAt DateTime?
@@ -296,13 +341,11 @@ model share {
   user   user   @relation(fields: [userId], references: [id])
   userId String @db.Uuid
 
-  post   post   @relation(fields: [postId], references: [id], onDelete: Cascade)
-  postId String @db.Uuid
+  nodeLocationId String        @db.Uuid
+  nodeLocation   node_location @relation(fields: [nodeLocationId], references: [id], onDelete: Cascade)
 
-  node   node   @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-  nodeId String @db.Uuid
-
-  isPinned Boolean?
+  post   post?   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId String? @db.Uuid
 
   likes    content_like[]
   comments content_comment[]
@@ -338,6 +381,7 @@ model location {
 
   label    location_label?
   contents content[]
+  post     post[]
 
   @@unique([userId, path])
 }
@@ -352,9 +396,8 @@ model location_label {
 }
 
 model tag {
-  name         String        @unique
-  content_tag  content_tag[]
-  feeders_tags feeder_tag[]
+  name        String        @unique
+  content_tag content_tag[]
 }
 
 model content {

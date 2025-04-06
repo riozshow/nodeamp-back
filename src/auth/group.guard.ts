@@ -1,9 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { PermissionType, PrismaClient } from '@prisma/client';
 import { JsonValue } from '@prisma/client/runtime/library';
 import { isUUID } from 'class-validator';
-import { FeederActions } from 'src/models/node/node.actions';
-import { FeederPermissions } from 'src/models/feeder/feeder.permissions';
 
 export type Permissions = {
   [key: string]: {
@@ -28,7 +26,7 @@ export class GroupGuard implements CanActivate {
       nodeId?: string;
       feederId?: string;
     },
-    private action: string,
+    private action: PermissionType,
   ) {}
 
   async canActivate(context: ExecutionContext) {
@@ -39,37 +37,43 @@ export class GroupGuard implements CanActivate {
     const { feederId: feederIdInput } = this.permissionSource;
     const feederId = params[feederIdInput] || query[feederIdInput];
 
-    let feeder: null | NodePermissionsType = null;
-
     if (feederId && isUUID(feederId)) {
-      if (Object.values(FeederActions).includes(this.action)) {
-        feeder = await prisma.feeder.findUnique({
-          where: { id: feederId },
-          select: {
-            hub: { select: { userId: true, id: true } },
-            permissions: {
-              select: {
-                data: true,
-              },
-            },
+      const permission = await prisma.feeder_permission.findUnique({
+        where: {
+          feederId_type: {
+            feederId,
+            type: this.action,
           },
-        });
+          OR: [
+            {
+              open: true,
+            },
+            ...(user?.id
+              ? [
+                  {
+                    feeder: {
+                      userId: user?.id,
+                    },
+                  },
+                  {
+                    groups: {
+                      some: {
+                        group: {
+                          userId: user?.id,
+                        },
+                      },
+                    },
+                  },
+                ]
+              : []),
+          ],
+        },
+        select: {
+          type: true,
+        },
+      });
 
-        if (!feeder) {
-          return false;
-        }
-
-        if (user?.id === feeder?.hub?.userId) return true;
-        const permissions = feeder.permissions.data as Permissions;
-        const requestedAction = await FeederPermissions.areActionsPermitted(
-          prisma,
-          [this.action],
-          user.id,
-          permissions,
-          user.id === feeder?.hub?.userId,
-        );
-        return requestedAction[this.action];
-      }
+      return permission?.type === this.action;
     }
 
     return false;

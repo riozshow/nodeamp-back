@@ -7,11 +7,19 @@ import { NodeProcesses } from './node.processes';
 import { ShareModule } from '../share/share.module';
 import { NodesController } from './node.controller';
 import { NodeFilter } from './node.filter';
+import { NodeDisplay } from './node.display';
+import { NodeCreator } from './node.creator';
 
 @Module({
   controllers: [NodesController],
-  providers: [NodeProcesses, NodeRepository, NodeFilter],
-  exports: [NodeProcesses, NodeRepository],
+  providers: [
+    NodeProcesses,
+    NodeRepository,
+    NodeFilter,
+    NodeDisplay,
+    NodeCreator,
+  ],
+  exports: [NodeProcesses, NodeRepository, NodeDisplay, NodeCreator],
   imports: [
     DbModule,
     WebsocketModule,

@@ -37,11 +37,25 @@ export class UsersRepository {
         select: {
           id: true,
           name: true,
-          profileHubId: true,
           feeders: {
             select: {
               id: true,
               name: true,
+            },
+          },
+          hubs: {
+            select: {
+              id: true,
+              name: true,
+              ports: {
+                where: {
+                  mode: 'RECIEVE',
+                },
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
             },
           },
         },
@@ -58,7 +72,11 @@ export class UsersRepository {
           id: true,
           name: true,
           label: true,
-          profileHubId: true,
+          hubs: {
+            where: {
+              isDefault: true,
+            },
+          },
         },
       });
     },

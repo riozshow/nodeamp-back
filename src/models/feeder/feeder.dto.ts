@@ -10,6 +10,7 @@ import {
   IsObject,
 } from 'class-validator';
 import { CompiledPermissions } from 'src/auth/group.guard';
+import { PermissionsConfig } from './feeder.permissions';
 
 export class GetPostsDTO {
   @IsUUID('4')
@@ -128,5 +129,5 @@ export class FeederDataDTO {
   };
 
   @IsOptional()
-  permissions: { data: CompiledPermissions };
+  permissions: PermissionsConfig;
 }

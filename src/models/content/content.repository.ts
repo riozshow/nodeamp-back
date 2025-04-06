@@ -142,6 +142,14 @@ export class ContentRepository {
         },
       });
     },
+    byFeederId: async (feederId: string, path: string) => {
+      return await this.db.content.findMany({
+        where: {
+          location: {},
+        },
+        select: ContentRepository.CONTENT_SHARE_SELECT,
+      });
+    },
   };
 
   public update = {

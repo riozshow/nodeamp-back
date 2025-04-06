@@ -58,6 +58,11 @@ export class NodeRepository {
         data: {
           name,
           type,
+          locations: {
+            create: {
+              path: '/',
+            },
+          },
           hub: { connect: { id: hubId } },
         },
         select: {

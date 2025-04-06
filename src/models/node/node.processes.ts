@@ -1,10 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DbService } from 'src/db/db.service';
-import { BadRequestException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { ShareStatusData } from '../share/share.types';
-import { ShareStatus } from './node.types';
 import { ShareRepository } from '../share/share.repository';
+import { Prisma, share } from '@prisma/client';
 
 @Injectable()
 export class NodeProcesses {
@@ -13,89 +10,80 @@ export class NodeProcesses {
     private shareRepository: ShareRepository,
   ) {}
 
-  static SHARE_STATUS_SELECT = {
-    post: {
+  static PROCEED_NODE_TYPE = {
+    id: true,
+    type: true,
+    targetNodes: {
       select: {
-        content: {
-          select: {
-            type: true,
-            tags: {
-              select: {
-                name: true,
-              },
-            },
-            interactions: true,
-          },
-        },
+        targetNodeId: true,
       },
     },
-    node: {
+    config: {
       select: {
-        type: true,
-        targetNodes: {
-          select: {
-            requirements: true,
-            targetNodeId: true,
-          },
-        },
+        data: true,
       },
     },
+    outputFeederId: true,
   };
 
-  async connect(
-    sorceNodeId: string,
-    targetNodeId: string,
-    requirements?: { [key: string]: string | string[] },
-  ) {
-    if (sorceNodeId !== targetNodeId) {
-      return await this.db.node_connections.create({
-        data: {
-          sourceNode: { connect: { id: sorceNodeId, type: { not: 'output' } } },
-          targetNode: { connect: { id: targetNodeId, type: { not: 'input' } } },
-          ...(requirements ? { requirements } : {}),
-        },
-      });
-    }
-    throw new BadRequestException();
-  }
-
-  async getShareStatus(shareId: string) {
-    let status = { shareId };
-    const share = await this.db.share.findUnique({
+  async proceedShare(share: share) {
+    const nodeLocation = await this.db.node_location.findUnique({
       where: {
-        id: shareId,
+        id: share.nodeLocationId,
       },
-      select: NodeProcesses.SHARE_STATUS_SELECT,
+      select: {
+        node: { select: NodeProcesses.PROCEED_NODE_TYPE },
+      },
     });
 
-    switch (share.node.type) {
+    if (this.proceed[nodeLocation?.node.type]) {
+      const moveTo = await this.proceed[nodeLocation.node.type](
+        share,
+        nodeLocation.node,
+      );
+      if (moveTo) {
+        this.shareRepository.update.moveTo(share.id, moveTo);
+      }
     }
-
-    return status;
   }
 
-  private shareStatus = {
-    ofInputNode: (share: ShareStatusData) => {
-      const [{ targetNodeId }] = share.node.targetNodes;
-      return { moveTo: targetNodeId };
+  private proceed: {
+    [type: string]: (
+      share: share,
+      node: Prisma.nodeGetPayload<{
+        select: typeof NodeProcesses.PROCEED_NODE_TYPE;
+      }>,
+    ) => Promise<string | void>;
+  } = {
+    shares: async (share, node) => {},
+    rater: async (share, node) => {
+      const rates = await this.db.content_rate.findMany({
+        where: {
+          nodeId: node.id,
+          shareId: share.id,
+        },
+        select: {
+          rate: true,
+        },
+      });
+
+      const data = node.config?.data as { ratingRoutes?: string[] };
+
+      if (!!rates.length && data?.ratingRoutes) {
+        const { ratingRoutes } = data;
+        const rate = rates[0];
+        const availableRoutes = ratingRoutes.slice(0, rate.rate - 1);
+        if (availableRoutes.length) {
+          const targetNodeIds = node.targetNodes.map((t) => t.targetNodeId);
+          for (let i = availableRoutes.length - 1; i > 0; i--) {
+            if (targetNodeIds.includes(availableRoutes[i])) {
+              return availableRoutes[i];
+            }
+          }
+          await this.shareRepository.delete.reject(share.id);
+        }
+      }
     },
-    ofOutputNode: (share: ShareStatusData) => {
-      return {};
-    },
-    ofRaterNode: (share: ShareStatusData) => {
-      return {};
-    },
+    filter: async (share, node) => {},
   };
-
-  async executeShareStatus(status: ShareStatus) {
-    const { shareId, isRejected, moveTo } = status;
-
-    if (moveTo) {
-      return await this.shareRepository.update.moveTo(shareId, moveTo);
-    }
-
-    if (isRejected) {
-      return await this.shareRepository.delete.one(shareId);
-    }
-  }
 }

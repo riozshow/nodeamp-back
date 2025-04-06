@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { DbService } from 'src/db/db.service';
 
 @Injectable()
@@ -6,17 +6,19 @@ export class UsersProcesses {
   constructor(private db: DbService) {}
 
   async connectProfileHub(userId: string, hubId: string) {
-    return await this.db.user.update({
+    if (!userId) throw new BadRequestException();
+
+    await this.db.hub.updateMany({
+      where: { userId },
+      data: { isDefault: null },
+    });
+    return await this.db.hub.update({
       where: {
-        id: userId,
+        id: hubId,
+        userId,
       },
       data: {
-        profileHub: {
-          connect: {
-            id: hubId,
-            userId,
-          },
-        },
+        isDefault: true,
       },
     });
   }

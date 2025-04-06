@@ -1,8 +1,10 @@
+import { PermissionType } from '@prisma/client';
+
 export type FeederActionType = {
   [key: string]: string;
 };
 
-export const FeederActions = {
+export const FeederActions: { [key: string]: PermissionType } = {
   view: 'user_group_post_view',
   rate: 'user_group_post_rate',
   share: 'user_group_post_share',

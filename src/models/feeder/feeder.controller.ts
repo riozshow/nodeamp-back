@@ -10,6 +10,7 @@ import {
   Query,
   Patch,
   UnauthorizedException,
+  BadRequestException,
 } from '@nestjs/common';
 import { GroupGuard } from 'src/auth/group.guard';
 import { AuthenticatedGuard } from 'src/auth/authenticated.guard';
@@ -22,18 +23,54 @@ import {
 } from '../share/share.dto';
 import { SessionType } from 'src/auth/auth.types';
 import { FeederDataDTO } from './feeder.dto';
+import { NodeDisplay } from '../node/node.display';
+import { NodeCreator } from '../node/node.creator';
 
 @Controller('feeders')
 export class FeederController {
   constructor(
     private shareRepository: ShareRepository,
+    private nodeDisplay: NodeDisplay,
+    private nodeCreator: NodeCreator,
     private repository: FeederRepository,
   ) {}
 
   @UseGuards(new GroupGuard({ feederId: 'feederId' }, FeederActions.view))
   @Get(':feederId/details')
-  async getDetails(@Param('feederId') feederId: string) {
-    return await this.repository.get.details(feederId);
+  async getDetails(
+    @Param('feederId') feederId: string,
+    @Session() session: SessionType,
+  ) {
+    const requestUserId = session.passport?.user.id;
+    return await this.repository.get.details(feederId, requestUserId);
+  }
+
+  @UseGuards(new GroupGuard({ feederId: 'feederId' }, FeederActions.view))
+  @Get(':feederId/shares')
+  async getShares(
+    @Param('feederId') feederId: string,
+    @Query('path') path: string,
+    @Session() session: SessionType,
+  ) {
+    const requestUserId = session.passport?.user.id;
+    const node = await this.nodeDisplay.getNodeType(feederId);
+
+    if (node) {
+      const { select, take, orderBy } = await this.nodeDisplay.getSelect({
+        requestUserId,
+        node,
+      });
+
+      return await this.shareRepository.get.byFeederId({
+        feederId,
+        select,
+        take,
+        path,
+        orderBy,
+      });
+    }
+
+    throw new BadRequestException();
   }
 
   @UseGuards(AuthenticatedGuard)
@@ -97,10 +134,26 @@ export class FeederController {
     @Session() session: SessionType,
   ) {
     const userId = session.passport.user.id;
-    return await this.shareRepository.create.inFeeder(feederId, {
+    const data = await this.nodeCreator.getData(feederId, userId, post);
+    return await this.shareRepository.create.inFeeder(feederId, data);
+  }
+
+  @UseGuards(new GroupGuard({ feederId: 'feederId' }, FeederActions.rate))
+  @UseGuards(AuthenticatedGuard)
+  @Post(':feederId/shares/:shareId/rate')
+  async rateShare(
+    @Param('feederId') feederId: string,
+    @Param('shareId') shareId: string,
+    @Query('rate') rate: string,
+    @Session() session: SessionType,
+  ) {
+    const userId = session.passport.user.id;
+    return await this.shareRepository.update.rate(
+      shareId,
       userId,
-      ...post,
-    });
+      feederId,
+      Number(rate),
+    );
   }
 
   @UseGuards(new GroupGuard({ feederId: 'feederId' }, FeederActions.create))
@@ -112,13 +165,19 @@ export class FeederController {
   async shareShare(
     @Param('feederId') feederId: string,
     @Query('sourceFeederId') sourceFeederId: string,
+    @Query('path') path: string,
     @Body() post: ShareSharePayloadDTO,
     @Session() session: SessionType,
   ) {
     const userId = session.passport.user.id;
-    return await this.shareRepository.share.inFeeder(feederId, sourceFeederId, {
-      userId,
-      ...post,
+    return await this.shareRepository.share.inFeeder({
+      sourceFeederId,
+      feederId,
+      path,
+      share: {
+        userId,
+        ...post,
+      },
     });
   }
 

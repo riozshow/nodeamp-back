@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { DbService } from 'src/db/db.service';
-import { PostRepository } from 'src/models/post/post.repository';
-import { ShareCreateDTO, ShareShareDTO } from './share.dto';
+import { ShareShareDTO } from './share.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { share } from '@prisma/client';
+import { content_rate, Prisma, share } from '@prisma/client';
 import { getCurrentDate } from 'src/utils/getCurrentDate';
 import { EVENTS } from 'src/events/events.names';
+import { BadRequestException } from '@nestjs/common';
 
 @Injectable()
 export class ShareRepository {
@@ -15,19 +15,6 @@ export class ShareRepository {
   ) {}
 
   static PAGE_SIZE = 5;
-
-  static NODE_SHARE_SELECT = {
-    id: true,
-    isPinned: true,
-    user: {
-      select: {
-        id: true,
-        name: true,
-      },
-    },
-    post: { select: PostRepository.POST_SHARE_SELECT },
-    acceptedAt: true,
-  };
 
   private emit = {
     create: (share: share) =>
@@ -39,155 +26,166 @@ export class ShareRepository {
     reject: (share: share) =>
       this.eventEmitter.emit(EVENTS.SHARES.REJECT, share),
     move: (share: share) => this.eventEmitter.emit(EVENTS.SHARES.MOVE, share),
+    rate: (rate: content_rate) =>
+      this.eventEmitter.emit(EVENTS.SHARES.RATE, rate),
   };
 
   public get = {
-    byFeederId: async (
-      feederId: string,
-      requestUserId?: string,
-      lastShareId?: string,
-    ) => {
+    byFeederId: async (data: {
+      feederId: string;
+      select: Prisma.shareSelect;
+      take: number;
+      orderBy: { sharedAt: 'desc' | 'asc' };
+      path?: string;
+      lastShareId?: string;
+    }) => {
       return await this.db.share.findMany({
         where: {
-          node: {
-            feederOutput: { id: feederId },
+          nodeLocation: {
+            path: data.path || '/',
+            node: {
+              feederOutput: { id: data.feederId },
+            },
           },
         },
-        select: {
-          ...ShareRepository.NODE_SHARE_SELECT,
-          comments: {
-            where: { userId: requestUserId },
-          },
-          likes: {
-            where: { userId: requestUserId },
-          },
-        },
-        take: ShareRepository.PAGE_SIZE,
-        cursor: { id: lastShareId },
-        orderBy: {
-          sharedAt: 'desc',
-        },
-      });
-    },
-    byNodeId: async (
-      nodeId: string,
-      requestUserId?: string,
-      lastShareId?: string,
-    ) => {
-      return await this.db.share.findMany({
-        where: {
-          node: {
-            id: nodeId,
-          },
-        },
-        select: {
-          ...ShareRepository.NODE_SHARE_SELECT,
-          comments: {
-            where: { userId: requestUserId },
-          },
-          likes: {
-            where: { userId: requestUserId },
-          },
-        },
-        take: ShareRepository.PAGE_SIZE,
-        cursor: { id: lastShareId },
-        orderBy: {
-          sharedAt: 'desc',
-        },
+        select: data.select,
+        take: data.take,
+        ...(data.lastShareId ? { cursor: { id: data.lastShareId } } : {}),
+        orderBy: data.orderBy,
       });
     },
   };
 
   public update = {
-    pin: async (shareId: string) => {
-      const share = await this.db.share.update({
-        where: { id: shareId },
-        data: {
-          isPinned: true,
-        },
-      });
-      return share;
-    },
+    pin: async (shareId: string) => {},
     moveTo: async (shareId: string, nodeId: string) => {
       const share = await this.db.share.update({
         where: { id: shareId },
         data: {
-          nodeId,
+          nodeLocation: {
+            connect: {
+              nodeId_path: {
+                nodeId,
+                path: '/',
+              },
+            },
+          },
           sharedAt: getCurrentDate(),
         },
       });
       this.emit.move(share);
       return share;
     },
+    rate: async (
+      shareId: string,
+      userId: string,
+      feederId: string,
+      rate: number,
+    ) => {
+      const share = await this.db.share.findUnique({
+        where: {
+          id: shareId,
+          nodeLocation: {
+            node: {
+              outputFeederId: feederId,
+            },
+          },
+        },
+        select: {
+          post: {
+            select: {
+              content: {
+                select: {
+                  id: true,
+                },
+              },
+            },
+          },
+        },
+      });
+      if (share) {
+        const alreadyRated = await this.db.content_rate.count({
+          where: {
+            shareId,
+            node: {
+              outputFeederId: feederId,
+            },
+            userId,
+          },
+        });
+
+        if (!alreadyRated) {
+          const rating = await this.db.content_rate.create({
+            data: {
+              share: { connect: { id: shareId } },
+              node: { connect: { outputFeederId: feederId } },
+              user: { connect: { id: userId } },
+              content: { connect: { id: share.post.content.id } },
+              rate,
+            },
+          });
+          this.emit.rate(rating);
+          return { shareId, feederId, rate };
+        }
+      }
+
+      throw new BadRequestException();
+    },
   };
 
   public create = {
-    inFeeder: async (feederId: string, post: ShareCreateDTO) => {
-      const share = await this.db.share.create({
-        data: {
-          node: {
-            connect: {
-              inputFeederId: feederId,
-            },
-          },
-          post: {
-            create: {
-              message: post.message,
-              ...(post.contentId
-                ? {
-                    content: {
-                      connect: { id: post.contentId, userId: post.userId },
-                    },
-                  }
-                : {}),
-              creatorFeeder: {
-                connect: { id: feederId },
-              },
-              user: { connect: { id: post.userId } },
-            },
-          },
-          user: { connect: { id: post.userId } },
-        },
-      });
+    inFeeder: async (feederId: string, data: Prisma.shareCreateInput) => {
+      const share = await this.db.share.create({ data });
       this.emit.create(share);
       return share;
     },
   };
 
   public share = {
-    inFeeder: async (
-      feederId: string,
-      sourceFeederId: string,
-      share: ShareShareDTO,
-    ) => {
+    inFeeder: async (data: {
+      feederId: string;
+      path?: string;
+      sourceFeederId: string;
+      share: ShareShareDTO;
+    }) => {
       const post = await this.db.post.findFirst({
         where: {
           shares: {
             some: {
-              id: share.shareId,
-              node: { feederOutput: { id: sourceFeederId } },
+              id: data.share.shareId,
+              nodeLocation: {
+                node: { feederOutput: { id: data.sourceFeederId } },
+              },
             },
           },
         },
       });
       if (post) {
-        const newShare = await this.db.share.create({
-          data: {
-            node: {
-              connect: {
-                inputFeederId: feederId,
-              },
-            },
-            post: {
-              connect: {
-                id: post.id,
-              },
-            },
-            user: { connect: { id: post.userId } },
-          },
+        const targetNode = await this.db.node.findUnique({
+          where: { inputFeederId: data.feederId },
         });
-        this.emit.create(newShare);
-        return newShare;
+        if (targetNode) {
+          const newShare = await this.db.share.create({
+            data: {
+              nodeLocation: {
+                connect: {
+                  nodeId_path: {
+                    path: data.path || '/',
+                    nodeId: targetNode.id,
+                  },
+                },
+              },
+              post: {
+                connect: {
+                  id: post.id,
+                },
+              },
+              user: { connect: { id: post.userId } },
+            },
+          });
+          this.emit.create(newShare);
+          return newShare;
+        }
       }
     },
   };
@@ -197,9 +195,11 @@ export class ShareRepository {
       const share = await this.db.share.delete({
         where: {
           id: shareId,
-          node: {
-            feederOutput: {
-              id: feederId,
+          nodeLocation: {
+            node: {
+              feederOutput: {
+                id: feederId,
+              },
             },
           },
         },
@@ -211,7 +211,9 @@ export class ShareRepository {
       const share = await this.db.share.delete({
         where: {
           id: shareId,
-          nodeId,
+          nodeLocation: {
+            nodeId,
+          },
         },
       });
       this.emit.remove(share);
@@ -232,6 +234,14 @@ export class ShareRepository {
         },
       });
       this.emit.remove(share);
+      return share;
+    },
+    reject: async (shareId: string) => {
+      const share = await this.db.share.delete({
+        where: { id: shareId },
+      });
+      this.emit.remove(share);
+      this.emit.reject(share);
       return share;
     },
   };

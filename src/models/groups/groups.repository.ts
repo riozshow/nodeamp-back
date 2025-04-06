@@ -46,4 +46,13 @@ export class GroupsRepository {
       }),
     ]);
   }
+
+  async getHubUserGroupsIds(hubId: string, userId: string) {
+    return await this.db.user_group
+      .findMany({
+        where: { hubId, userId },
+        select: { id: true },
+      })
+      .then((groups) => groups.map((g) => g.id));
+  }
 }

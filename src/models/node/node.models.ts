@@ -10,6 +10,8 @@ export class NodeModel {
 
       readonly acceptViewer: boolean;
       readonly acceptCreator: boolean;
+
+      readonly settingsTab?: boolean;
     },
   ) {}
 }
@@ -43,6 +45,16 @@ export const NODE_MODELS = {
 
     acceptCreator: true,
     acceptViewer: false,
+  }),
+
+  files: new NodeModel({
+    name: 'Files',
+
+    maxOutputs: 0,
+    maxInputs: 0,
+
+    acceptCreator: true,
+    acceptViewer: true,
   }),
 };
 

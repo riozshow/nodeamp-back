@@ -4,14 +4,13 @@ import { FeederRepository } from 'src/models/feeder/feeder.repository';
 import { FeederDataDTO } from '../feeder/feeder.dto';
 import { RouterUpdate } from './hub.dto';
 import {
-  feeder_permissions,
   node_config,
   node_connections,
   node_position,
+  Prisma,
   PrismaClient,
 } from '@prisma/client';
 import { NodeRepository } from '../node/node.repository';
-import { CompiledPermissions } from 'src/auth/group.guard';
 import { AVAILABLE_NODE_MODELS, NODE_MODELS } from '../node/node.models';
 
 @Injectable()
@@ -21,32 +20,6 @@ export class HubRouter {
     private feederRepository: FeederRepository,
     private nodeRepository: NodeRepository,
   ) {}
-
-  async updateViewPosition(
-    hubId: string,
-    x: number,
-    y: number,
-    userId: string,
-  ) {
-    const updated = await this.db.hub.update({
-      where: {
-        id: hubId,
-        userId,
-      },
-      data: {
-        position: {
-          upsert: {
-            create: { x, y },
-            update: { x, y },
-            where: {
-              hubId,
-            },
-          },
-        },
-      },
-    });
-    return !!updated;
-  }
 
   async createFeeder(hubId: string, userId: string, feeder: FeederDataDTO) {
     return await this.feederRepository.create.one(hubId, {
@@ -61,7 +34,9 @@ export class HubRouter {
     userId: string,
     feeder: FeederDataDTO,
   ) {
-    let permissions: { data: CompiledPermissions } | undefined;
+    let permissions = [];
+    const updateData: Prisma.feederUpdateInput = {};
+
     if (feeder.permissions) {
       permissions = await this.feederRepository.update.permissions(
         feederId,
@@ -70,88 +45,59 @@ export class HubRouter {
       );
     }
 
-    return {
-      ...{ permissions },
-      ...(await this.db.feeder.update({
-        where: {
-          id: feederId,
+    if (feeder.name) {
+      updateData.name = feeder.name;
+    }
+
+    if (feeder.inputNode) {
+      updateData.inputNode = {
+        connect: {
           hubId,
-          userId,
+          id: feeder.inputNode.id,
         },
-        data: {
-          ...(feeder.name ? { name: feeder.name } : {}),
-          ...(feeder.inputNode?.id
-            ? {
-                inputNode: {
-                  connect: {
-                    hubId,
-                    id: feeder.inputNode.id,
-                  },
-                },
-              }
-            : {}),
-          ...(feeder.outputNode?.id
-            ? {
-                outputNode: {
-                  connect: {
-                    hubId,
-                    id: feeder.outputNode.id,
-                  },
-                },
-              }
-            : {}),
-          ...(feeder.label?.description
-            ? {
-                label: {
-                  upsert: {
-                    create: { description: feeder.label.description },
-                    update: { description: feeder.label.description },
-                    where: { feederId },
-                  },
-                },
-              }
-            : {}),
+      };
+    }
+
+    if (feeder.outputNode) {
+      updateData.outputNode = {
+        connect: {
+          hubId,
+          id: feeder.outputNode.id,
         },
-        select: {
-          id: true,
-          name: true,
-          label: {
-            select: {
-              description: true,
-            },
-          },
-          inputNode: {
-            select: {
-              id: true,
-              name: true,
-              type: true,
-            },
-          },
-          outputNode: {
-            select: {
-              id: true,
-              name: true,
-              type: true,
-            },
-          },
-        },
-      })),
-    };
+      };
+    }
+
+    await this.db.feeder.update({
+      where: {
+        id: feederId,
+        hubId,
+        userId,
+      },
+      data: updateData,
+    });
+
+    return this.feederRepository.get.edit(feederId, userId);
   }
 
   async setDefaultFeeder(hubId: string, userId: string, feederId: string) {
-    return await this.db.hub.update({
+    await this.db.feeder.updateMany({
       where: {
-        id: hubId,
+        id: feederId,
         userId,
-        feeders: {
-          some: {
-            id: feederId,
-          },
-        },
+        hubId,
       },
       data: {
-        defaultFeederId: feederId,
+        isDefault: null,
+      },
+    });
+    return await this.db.feeder.update({
+      where: {
+        id: feederId,
+        userId,
+        hubId,
+      },
+      data: {
+        isDefault: true,
       },
     });
   }
@@ -213,8 +159,6 @@ export class HubRouter {
       }
     });
   }
-
-  async setFeederPermissions(nodeId: string, permissions: feeder_permissions) {}
 
   async nodeExistInRouter(
     nodeId: string,
@@ -318,11 +262,11 @@ export class HubRouter {
   }
 
   async update(hubId: string, requestUserId: string, data: RouterUpdate) {
-    const nodesIds = Object.keys(data);
+    const nodesIds = Object.keys(data.nodes);
     for await (const id of nodesIds) {
       if (await this.nodeExistInRouter(id, hubId, requestUserId)) {
         const { config, position, targetNodes, inputFeederId, outputFeederId } =
-          data[id] as {
+          data.nodes[id] as {
             config?: node_config;
             position?: node_position;
             targetNodes?: node_connections[];
@@ -361,6 +305,7 @@ export class HubRouter {
         }
       }
     }
+
     return { updated: true };
   }
 }

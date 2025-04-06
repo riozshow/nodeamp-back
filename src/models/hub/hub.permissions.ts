@@ -1,55 +1,86 @@
 import { Injectable } from '@nestjs/common';
 import { DbService } from 'src/db/db.service';
-import { FeederPermissions } from '../feeder/feeder.permissions';
-import { FeederActions } from '../node/node.actions';
 
 @Injectable()
 export class HubPermissions {
-  constructor(
-    private db: DbService,
-    private feederPermissions: FeederPermissions,
-  ) {}
+  constructor(private db: DbService) {}
 
-  getNewSharesInfo({
-    visits,
-    lastShareAt,
-  }: {
-    visits: { lastVisitAt: Date }[];
-    lastShareAt: Date;
-  }) {
-    if (visits?.length) {
-      const [{ lastVisitAt }] = visits;
-      const lastVisitDate = new Date(lastVisitAt).getTime();
-      const lastShareDate = new Date(lastShareAt).getTime();
-      return lastShareDate > lastVisitDate;
-    } else {
-      return !!lastShareAt;
-    }
-  }
-
-  async getPermittedFeeders(hubId: string, requestUserId: string) {
-    const feeders = await this.db.feeder.findMany({
+  async getPermittedFeeders(hubId: string, requestUserId?: string) {
+    return await this.db.feeder.findMany({
       where: {
         hubId,
+        OR: [
+          requestUserId ? { userId: requestUserId } : {},
+          {
+            permissions: {
+              some: {
+                type: 'user_group_post_view',
+                OR: [
+                  {
+                    open: true,
+                  },
+                  requestUserId
+                    ? {
+                        groups: {
+                          some: {
+                            group: {
+                              userId: requestUserId,
+                            },
+                          },
+                        },
+                      }
+                    : {},
+                ],
+              },
+            },
+          },
+        ],
       },
       select: {
         id: true,
         name: true,
+        isDefault: true,
+        outputNode: {
+          select: {
+            type: true,
+          },
+        },
       },
     });
+  }
 
-    const permissions = Object.fromEntries(
-      await Promise.all(
-        feeders.map(async (feeder) => [
-          feeder.id,
-          await this.feederPermissions.getFeederPermissions(
-            feeder.id,
-            requestUserId,
-          ),
-        ]),
-      ),
-    );
-
-    return feeders.filter((f) => permissions[f.id][FeederActions.view]);
+  async getPermittedPorts(hubId: string, requestUserId?: string) {
+    return await this.db.port.findMany({
+      where: {
+        hubId,
+        mode: 'SEND',
+        OR: [
+          {
+            open: true,
+          },
+          requestUserId
+            ? {
+                groups: {
+                  some: {
+                    group: {
+                      userId: requestUserId,
+                    },
+                  },
+                },
+              }
+            : {},
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        isDefault: true,
+        _count: {
+          select: {
+            recievers: true,
+          },
+        },
+      },
+    });
   }
 }

@@ -13,7 +13,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { AuthenticatedGuard } from 'src/auth/authenticated.guard';
-import { RouterUpdate } from './hub.dto';
+import { NewPortDTO, RouterUpdate, UpdateGatewayDTO } from './hub.dto';
 import { HubGuard } from 'src/auth/hub.guard';
 import { HubRouter } from './hub.router';
 import { HubRepository } from './hub.repository';
@@ -21,11 +21,13 @@ import { SessionType } from 'src/auth/auth.types';
 import { HubProcesses } from './hub.processes';
 import { FeederDataDTO } from '../feeder/feeder.dto';
 import { NODE_MODELS } from '../node/node.models';
+import { HubGateway } from './hub.gateway';
 
 @Controller('hubs')
 export class HubController {
   constructor(
     private router: HubRouter,
+    private gateway: HubGateway,
     private repository: HubRepository,
     private processes: HubProcesses,
   ) {}
@@ -87,6 +89,57 @@ export class HubController {
 
   @UseGuards(new HubGuard({ hubId: 'hubId' }))
   @UseGuards(AuthenticatedGuard)
+  @Post(':hubId/ports')
+  async createPort(
+    @Session() session: SessionType,
+    @Param('hubId') hubId: string,
+    @Body() body: NewPortDTO,
+  ) {
+    if (!session.passport?.user.id) throw new NotFoundException();
+    const userId = session.passport.user.id;
+    return await this.gateway.createPort(hubId, userId, body);
+  }
+
+  @UseGuards(new HubGuard({ hubId: 'hubId' }))
+  @UseGuards(AuthenticatedGuard)
+  @Delete(':hubId/ports/:portId')
+  async deletePort(
+    @Session() session: SessionType,
+    @Param('hubId') hubId: string,
+    @Param('portId') portId: string,
+  ) {
+    if (!session.passport?.user.id) throw new NotFoundException();
+    const userId = session.passport.user.id;
+    return await this.gateway.deletePort(portId, hubId, userId);
+  }
+
+  @UseGuards(new HubGuard({ hubId: 'hubId' }))
+  @UseGuards(AuthenticatedGuard)
+  @Get(':hubId/gateway')
+  async getGateway(
+    @Session() session: SessionType,
+    @Param('hubId') hubId: string,
+  ) {
+    if (!session.passport?.user.id) throw new NotFoundException();
+    const userId = session.passport.user.id;
+    return await this.gateway.getData(hubId, userId);
+  }
+
+  @UseGuards(new HubGuard({ hubId: 'hubId' }))
+  @UseGuards(AuthenticatedGuard)
+  @Patch(':hubId/gateway')
+  async updateGateway(
+    @Session() session: SessionType,
+    @Param('hubId') hubId: string,
+    @Body() body: UpdateGatewayDTO,
+  ) {
+    if (!session.passport?.user.id) throw new NotFoundException();
+    const userId = session.passport.user.id;
+    return await this.gateway.update(hubId, userId, body);
+  }
+
+  @UseGuards(new HubGuard({ hubId: 'hubId' }))
+  @UseGuards(AuthenticatedGuard)
   @Patch(':hubId/settings/routing')
   async updateRouter(
     @Session() session: SessionType,
@@ -103,29 +156,6 @@ export class HubController {
           availableNodes: this.processes.getAvailableNodes(),
         };
       }
-    } else {
-      throw new BadRequestException();
-    }
-  }
-
-  @UseGuards(new HubGuard({ hubId: 'hubId' }))
-  @UseGuards(AuthenticatedGuard)
-  @Post(':hubId/settings/routing/position')
-  async saveViewPosition(
-    @Session() session: SessionType,
-    @Param('hubId') hubId: string,
-    @Query('x') x: string,
-    @Query('y') y: string,
-  ) {
-    if (!session.passport?.user.id) throw new NotFoundException();
-    const userId = session.passport.user.id;
-    if (userId) {
-      return this.router.updateViewPosition(
-        hubId,
-        Number(x),
-        Number(y),
-        userId,
-      );
     } else {
       throw new BadRequestException();
     }
@@ -191,5 +221,24 @@ export class HubController {
     if (!session.passport?.user.id) throw new NotFoundException();
     const userId = session.passport.user.id;
     return await this.processes.subscribe(hubId, userId);
+  }
+
+  @UseGuards(new HubGuard({ hubId: 'hubId' }))
+  @UseGuards(AuthenticatedGuard)
+  @Post(':hubId/ports/:recieverPortId/subscriptions/:senderPortId')
+  async subscribePort(
+    @Session() session: SessionType,
+    @Param('hubId') hubId: string,
+    @Param('recieverPortId') recieverPortId: string,
+    @Param('senderPortId') senderPortId: string,
+  ) {
+    if (!session.passport?.user.id) throw new NotFoundException();
+    const userId = session.passport.user.id;
+    return await this.gateway.subscribePort(
+      hubId,
+      userId,
+      recieverPortId,
+      senderPortId,
+    );
   }
 }

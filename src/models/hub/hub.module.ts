@@ -1,4 +1,4 @@
-import { forwardRef, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { HubController } from './hub.controller';
 import { DbModule } from 'src/db/db.module';
 import { HubRepository } from './hub.repository';
@@ -10,9 +10,16 @@ import { WebsocketModule } from 'src/websocket/websocket.module';
 import { HubRouter } from './hub.router';
 import { HubPermissions } from './hub.permissions';
 import { HubProcesses } from './hub.processes';
+import { HubGateway } from './hub.gateway';
 
 @Module({
-  providers: [HubRepository, HubRouter, HubPermissions, HubProcesses],
+  providers: [
+    HubRepository,
+    HubRouter,
+    HubPermissions,
+    HubProcesses,
+    HubGateway,
+  ],
   controllers: [HubController],
   imports: [
     DbModule,

@@ -6,6 +6,7 @@ export const EVENTS = {
     UPDATE: 'share.update',
     REJECT: 'share.reject',
     REMOVE: 'share.remove',
+    RATE: 'share.rate',
     UNLIKE: 'share.unlike',
     LIKE: 'share.like',
     MOVE: 'share.move',

@@ -5,9 +5,7 @@ import { feeder } from '@prisma/client';
 import { NodeRepository } from '../node/node.repository';
 import { EVENTS } from 'src/events/events.names';
 import { FeederDataDTO } from './feeder.dto';
-import { FeederPermissions } from './feeder.permissions';
-import { CompiledPermissions, Permissions } from 'src/auth/group.guard';
-import { NODE_MODELS } from '../node/node.models';
+import { FeederPermissions, PermissionsConfig } from './feeder.permissions';
 
 @Injectable()
 export class FeederRepository {
@@ -45,49 +43,27 @@ export class FeederRepository {
         select: {
           id: true,
           name: true,
-          label: {
+          inputNode: {
             select: {
-              description: true,
+              id: true,
+              name: true,
+              type: true,
+            },
+          },
+          outputNode: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
             },
           },
           permissions: {
             select: {
-              data: true,
-            },
-          },
-        },
-      });
-    },
-    details: async (id: string) => {
-      return await this.db.feeder.findUnique({
-        where: {
-          id,
-        },
-        select: {
-          id: true,
-          name: true,
-          label: {
-            select: {
-              description: true,
-            },
-          },
-          stats: {
-            select: {
-              postsCount: true,
-            },
-          },
-          tags: {
-            select: {
-              count: true,
-              name: true,
-            },
-          },
-          connectedPorts: {
-            select: {
-              hub: {
+              type: true,
+              open: true,
+              groups: {
                 select: {
-                  id: true,
-                  name: true,
+                  groupId: true,
                 },
               },
             },
@@ -95,19 +71,46 @@ export class FeederRepository {
         },
       });
     },
-    permissions: async (feederId: string, requestUserId: string) => {
-      const permissions = (await this.db.feeder_permissions.findUnique({
+    permissions: async (feederId: string, reqestUserId: string) => {
+      return this.db.feeder_permission.findMany({
         where: {
-          feederId,
           feeder: {
-            userId: requestUserId,
+            id: feederId,
+            userId: reqestUserId,
           },
         },
         select: {
-          data: true,
+          open: true,
+          type: true,
+          groups: {
+            select: {
+              groupId: true,
+            },
+          },
         },
-      })) as { data: Permissions };
-      return this.feederPermissions.compilePermissions(permissions.data);
+      });
+    },
+    details: async (id: string, reqestUserId?: string) => {
+      return {
+        ...(await this.db.feeder.findUnique({
+          where: {
+            id,
+          },
+          select: {
+            id: true,
+            name: true,
+            stats: {
+              select: {
+                postsCount: true,
+              },
+            },
+          },
+        })),
+        permissions: await this.feederPermissions.getPermissions(
+          id,
+          reqestUserId,
+        ),
+      };
     },
   };
 
@@ -119,22 +122,11 @@ export class FeederRepository {
         `${data.name} shares`,
       );
 
-      const permissions = await this.feederPermissions.createPermissions(
-        hubId,
-        data?.permissions?.data ||
-          this.feederPermissions.DEFAULT_PERMISSIONS.PUBLIC,
-      );
-
       const feeder = await this.db.feeder.create({
         data: {
           name: data.name,
           hub: { connect: { id: hubId, userId: data.userId } },
           user: { connect: { id: data.userId } },
-          permissions: {
-            create: {
-              data: permissions,
-            },
-          },
           inputNode: {
             connect: { id: node.id },
           },
@@ -152,11 +144,7 @@ export class FeederRepository {
           name: true,
           userId: true,
           hubId: true,
-          label: {
-            select: {
-              description: true,
-            },
-          },
+          isDefault: true,
           inputNode: {
             select: {
               id: true,
@@ -174,6 +162,12 @@ export class FeederRepository {
         },
       });
 
+      await this.feederPermissions.setPermissions(
+        feeder.id,
+        data.userId,
+        FeederPermissions.DEFAULT_PERMISSIONS.PUBLIC,
+      );
+
       this.emit.create(feeder);
 
       return feeder;
@@ -186,6 +180,16 @@ export class FeederRepository {
       requestUserId: string,
       feeder: FeederDataDTO,
     ) => {
+      let permissions = [];
+
+      if (feeder.permissions) {
+        permissions = await this.feederPermissions.setPermissions(
+          feederId,
+          requestUserId,
+          feeder.permissions,
+        );
+      }
+
       const updatedFeeder = await this.db.feeder.update({
         where: { id: feederId, userId: requestUserId },
         data: {
@@ -211,18 +215,24 @@ export class FeederRepository {
       });
 
       this.emit.update(updatedFeeder);
-      return updatedFeeder;
+
+      console.log(permissions);
+
+      return {
+        ...updatedFeeder,
+        ...(feeder.permissions ? { permissions } : {}),
+      };
     },
 
     permissions: async (
       feederId: string,
       requestUserId: string,
-      permissions: { data: CompiledPermissions },
+      permissions: PermissionsConfig,
     ) => {
-      return await this.feederPermissions.updatePermissions(
+      return await this.feederPermissions.setPermissions(
         feederId,
         requestUserId,
-        permissions.data,
+        permissions,
       );
     },
   };

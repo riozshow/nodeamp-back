@@ -1,3 +1,4 @@
+import { PortMode } from '@prisma/client';
 import {
   IsArray,
   IsOptional,
@@ -43,5 +44,28 @@ export class NewFeeder {
 }
 
 export class RouterUpdate {
-  [nodeId: string]: { [property: string]: unknown };
+  nodes: {
+    [nodeId: string]: { [property: string]: unknown };
+  };
+  emitters: {
+    [emitterId: string]: { [property: string]: unknown };
+  };
+}
+
+export class NewPortDTO {
+  @IsString()
+  name: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @IsString()
+  mode: PortMode;
+}
+
+export class UpdateGatewayDTO {
+  ports: {
+    [portId: string]: { [property: string]: unknown };
+  };
 }
