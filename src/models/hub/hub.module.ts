@@ -11,6 +11,7 @@ import { HubRouter } from './hub.router';
 import { HubPermissions } from './hub.permissions';
 import { HubProcesses } from './hub.processes';
 import { HubGateway } from './hub.gateway';
+import { HubGroups } from './hub.groups';
 
 @Module({
   providers: [
@@ -19,6 +20,7 @@ import { HubGateway } from './hub.gateway';
     HubPermissions,
     HubProcesses,
     HubGateway,
+    HubGroups,
   ],
   controllers: [HubController],
   imports: [
@@ -29,6 +31,6 @@ import { HubGateway } from './hub.gateway';
     NodeModule,
     WebsocketModule,
   ],
-  exports: [HubRepository],
+  exports: [HubRepository, HubProcesses],
 })
 export class HubModule {}

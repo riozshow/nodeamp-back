@@ -64,12 +64,19 @@ export class NodeDisplay {
     }),
   };
 
+  private shareTakes: { [key: string]: number } = {
+    shares: 3,
+    rater: 5,
+  };
+
   public async getSelect({
     node,
     requestUserId,
+    loadLast,
   }: {
     requestUserId?: string;
     node: { type: string; id: string };
+    loadLast: boolean;
   }): Promise<{
     select: Prisma.shareSelect;
     take: number;
@@ -82,7 +89,7 @@ export class NodeDisplay {
             nodeId: node.id,
             requestUserId,
           }),
-          take: 4,
+          take: loadLast ? 1 : this.shareTakes[node.type] || 0,
           orderBy: { sharedAt: 'desc' },
         };
       }

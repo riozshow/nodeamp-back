@@ -17,7 +17,7 @@ export class HubPermissions {
                 type: 'user_group_post_view',
                 OR: [
                   {
-                    open: true,
+                    public: true,
                   },
                   requestUserId
                     ? {
@@ -40,44 +40,92 @@ export class HubPermissions {
         id: true,
         name: true,
         isDefault: true,
+        tags: {
+          select: {
+            name: true,
+          },
+        },
         outputNode: {
           select: {
             type: true,
           },
         },
+        inputNode: {
+          select: {
+            _count: true,
+          },
+        },
+        ...(requestUserId
+          ? {
+              _count: {
+                select: {
+                  notifications: {
+                    where: {
+                      feeder: {
+                        userId: requestUserId,
+                      },
+                      type: { in: ['SHARE_CREATED', 'SHARE_MOVED'] },
+                    },
+                  },
+                },
+              },
+            }
+          : {}),
       },
     });
   }
 
   async getPermittedPorts(hubId: string, requestUserId?: string) {
+    if (!requestUserId) return [];
     return await this.db.port.findMany({
       where: {
         hubId,
-        mode: 'SEND',
         OR: [
           {
             open: true,
           },
-          requestUserId
-            ? {
-                groups: {
-                  some: {
-                    group: {
-                      userId: requestUserId,
-                    },
-                  },
+          {
+            hub: {
+              userId: requestUserId,
+            },
+          },
+          {
+            groups: {
+              some: {
+                group: {
+                  userId: requestUserId,
                 },
-              }
-            : {},
+              },
+            },
+          },
         ],
       },
       select: {
         id: true,
+        mode: true,
         name: true,
-        isDefault: true,
-        _count: {
+        recievers: {
+          where: {
+            recieverPort: {
+              hub: {
+                userId: requestUserId,
+              },
+            },
+          },
           select: {
-            recievers: true,
+            recieverPortId: true,
+          },
+        },
+        senders: {
+          where: {
+            senderPort: {
+              hub: {
+                userId: requestUserId,
+              },
+            },
+          },
+          select: {
+            senderPortId: true,
           },
         },
       },

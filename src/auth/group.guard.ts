@@ -46,7 +46,7 @@ export class GroupGuard implements CanActivate {
           },
           OR: [
             {
-              open: true,
+              public: true,
             },
             ...(user?.id
               ? [

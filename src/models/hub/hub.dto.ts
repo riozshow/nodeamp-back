@@ -1,6 +1,7 @@
-import { PortMode } from '@prisma/client';
+import { GroupPermissionType, PortMode } from '@prisma/client';
 import {
   IsArray,
+  IsBoolean,
   IsOptional,
   IsString,
   Length,
@@ -68,4 +69,33 @@ export class UpdateGatewayDTO {
   ports: {
     [portId: string]: { [property: string]: unknown };
   };
+}
+
+export class UpdateGroupDTO {
+  @IsString()
+  @IsOptional()
+  name: string;
+
+  @IsBoolean()
+  @IsOptional()
+  public: boolean;
+
+  @IsArray()
+  @IsOptional()
+  permissions?: {
+    id: string;
+    type: GroupPermissionType;
+    public: boolean;
+    groups?: { groupId: string }[];
+  }[];
+}
+
+export class NewHubDTO {
+  @IsString()
+  name: string;
+}
+
+export class NewGroupDTO {
+  @IsString()
+  name: string;
 }

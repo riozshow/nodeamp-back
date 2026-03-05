@@ -21,7 +21,7 @@ export class WebsocketService {
     client: Socket,
     { userId, key }: { userId: string; key: string },
   ) {
-    if (typeof this.clients[userId][key] === 'boolean') {
+    if (typeof this.clients[userId]?.[key] === 'boolean') {
       this.clients[userId][key] = client;
       client.on('close', () => {
         delete this.clients[userId][key];
@@ -37,7 +37,8 @@ export class WebsocketService {
   }
 
   emitTo(usersIds: string[], message: string, body: any) {
-    usersIds.forEach((userId) => {
+    const users = new Set(usersIds);
+    users.forEach((userId) => {
       if (this.clients[userId]) {
         for (const key in this.clients[userId]) {
           if (typeof this.clients[userId][key] !== 'boolean') {

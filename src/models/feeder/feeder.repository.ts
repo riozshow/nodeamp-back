@@ -43,6 +43,7 @@ export class FeederRepository {
         select: {
           id: true,
           name: true,
+          isDefault: true,
           inputNode: {
             select: {
               id: true,
@@ -60,7 +61,7 @@ export class FeederRepository {
           permissions: {
             select: {
               type: true,
-              open: true,
+              public: true,
               groups: {
                 select: {
                   groupId: true,
@@ -80,7 +81,7 @@ export class FeederRepository {
           },
         },
         select: {
-          open: true,
+          public: true,
           type: true,
           groups: {
             select: {
@@ -99,9 +100,19 @@ export class FeederRepository {
           select: {
             id: true,
             name: true,
-            stats: {
+            outputNode: {
               select: {
-                postsCount: true,
+                type: true,
+              },
+            },
+            inputNode: {
+              select: {
+                _count: true,
+              },
+            },
+            tags: {
+              select: {
+                name: true,
               },
             },
           },
@@ -216,8 +227,6 @@ export class FeederRepository {
 
       this.emit.update(updatedFeeder);
 
-      console.log(permissions);
-
       return {
         ...updatedFeeder,
         ...(feeder.permissions ? { permissions } : {}),
@@ -234,6 +243,29 @@ export class FeederRepository {
         requestUserId,
         permissions,
       );
+    },
+
+    setAsDefault: async (feederId: string, requestUserId: string) => {
+      await this.db.$transaction(async (tx) => {
+        await tx.feeder.updateMany({
+          where: {
+            hub: { feeders: { some: { id: feederId, userId: requestUserId } } },
+          },
+          data: {
+            isDefault: false,
+          },
+        });
+        await this.db.feeder.update({
+          where: {
+            id: feederId,
+            hub: { feeders: { some: { id: feederId, userId: requestUserId } } },
+          },
+          data: {
+            isDefault: true,
+          },
+        });
+      });
+      return { updated: true };
     },
   };
 

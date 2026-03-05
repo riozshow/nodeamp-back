@@ -80,26 +80,35 @@ export class HubRouter {
   }
 
   async setDefaultFeeder(hubId: string, userId: string, feederId: string) {
-    await this.db.feeder.updateMany({
-      where: {
-        id: feederId,
-        userId,
-        hubId,
-      },
-      data: {
-        isDefault: null,
-      },
+    await this.db.$transaction(async (tx) => {
+      await tx.feeder.updateMany({
+        where: {
+          userId,
+          hub: {
+            id: hubId,
+            feeders: {
+              some: {
+                id: feederId,
+              },
+            },
+          },
+        },
+        data: {
+          isDefault: null,
+        },
+      });
+      return await tx.feeder.update({
+        where: {
+          id: feederId,
+          userId,
+          hubId,
+        },
+        data: {
+          isDefault: true,
+        },
+      });
     });
-    return await this.db.feeder.update({
-      where: {
-        id: feederId,
-        userId,
-        hubId,
-      },
-      data: {
-        isDefault: true,
-      },
-    });
+    return { updated: true };
   }
 
   async deleteFeeder(hubId: string, userId: string, feederId: string) {

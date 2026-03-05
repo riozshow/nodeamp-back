@@ -10,7 +10,6 @@ export class HubRepository {
   constructor(
     private db: DbService,
     private hubPermissions: HubPermissions,
-    private groups: GroupsRepository,
     private router: HubRouter,
   ) {}
 
@@ -26,14 +25,13 @@ export class HubRepository {
         },
       });
 
-      await this.groups.createHubDefaultUsersGroups(hub.id, userId);
-
       const feeder = await this.router.createFeeder(hub.id, userId, {
         name: `${name} main`,
         permissions: FeederPermissions.DEFAULT_PERMISSIONS.PUBLIC,
       });
 
       await this.router.setDefaultFeeder(hub.id, userId, feeder.id);
+
       return await this.get.one(hub.id, userId);
     },
   };
@@ -45,7 +43,17 @@ export class HubRepository {
         select: {
           id: true,
           name: true,
-          userId: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          tags: {
+            select: {
+              name: true,
+            },
+          },
         },
       });
 
@@ -65,12 +73,183 @@ export class HubRepository {
 
       return {
         id: hub.id,
-        userId: hub.userId,
+        user: hub.user,
         name: hub.name,
+        tags: hub.tags,
         feeders,
         ports,
-        configurable: hub.userId === requestUserId,
+        configurable: hub.user.id === requestUserId,
       };
+    },
+
+    oneFromList: async (hubId: string, userId: string) => {
+      return this.db.hub.findUnique({
+        where: {
+          id: hubId,
+          OR: [
+            {
+              feeders: {
+                some: {
+                  OR: [
+                    userId ? { userId } : {},
+                    {
+                      permissions: {
+                        some: {
+                          type: 'user_group_post_view',
+                          OR: [
+                            { public: true },
+                            userId
+                              ? {
+                                  groups: {
+                                    some: {
+                                      group: {
+                                        users: {
+                                          some: {
+                                            userId,
+                                          },
+                                        },
+                                      },
+                                    },
+                                  },
+                                }
+                              : {},
+                          ],
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+            {
+              ports: {
+                some: {
+                  OR: [
+                    userId
+                      ? {
+                          hub: { userId },
+                        }
+                      : {},
+                    {
+                      open: true,
+                    },
+                    userId
+                      ? {
+                          groups: {
+                            some: {
+                              group: {
+                                users: {
+                                  some: {
+                                    userId,
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        }
+                      : {},
+                  ],
+                },
+              },
+            },
+          ],
+        },
+        select: {
+          id: true,
+          name: true,
+          tags: {
+            select: {
+              name: true,
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          _count: {
+            select: {
+              feeders: {
+                where: {
+                  OR: [
+                    userId ? { userId } : {},
+                    {
+                      permissions: {
+                        some: {
+                          type: 'user_group_post_view',
+                          OR: [
+                            { public: true },
+                            userId
+                              ? {
+                                  groups: {
+                                    some: {
+                                      group: {
+                                        users: {
+                                          some: {
+                                            userId,
+                                          },
+                                        },
+                                      },
+                                    },
+                                  },
+                                }
+                              : {},
+                          ],
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+              ports: {
+                where: {
+                  OR: [
+                    userId
+                      ? {
+                          hub: { userId },
+                        }
+                      : {},
+                    {
+                      open: true,
+                    },
+                    userId
+                      ? {
+                          groups: {
+                            some: {
+                              group: {
+                                users: {
+                                  some: {
+                                    userId,
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        }
+                      : {},
+                  ],
+                },
+              },
+            },
+          },
+        },
+      });
+    },
+
+    owner: async (hubId: string, reqestUserId: string) => {
+      return this.db.user.findFirst({
+        where: {
+          hubs: {
+            some: {
+              id: hubId,
+            },
+          },
+        },
+        select: {
+          id: true,
+        },
+      });
     },
 
     settings: async (hubId: string, requestUserId: string) => {
@@ -110,11 +289,9 @@ export class HubRepository {
             },
           },
           groups: {
-            where: { type: { not: 'blocked' } },
             select: {
               id: true,
               name: true,
-              type: true,
             },
           },
         },
@@ -160,11 +337,9 @@ export class HubRepository {
             },
           },
           groups: {
-            where: { type: { not: 'blocked' } },
             select: {
               id: true,
               name: true,
-              type: true,
             },
           },
         },
@@ -208,13 +383,177 @@ export class HubRepository {
             },
           },
           groups: {
-            where: { type: { not: 'blocked' } },
             select: {
               id: true,
               name: true,
-              type: true,
             },
           },
+        },
+      });
+    },
+
+    many: async (userId: string) => {
+      return this.db.hub.findMany({
+        where: {
+          OR: [
+            {
+              feeders: {
+                some: {
+                  OR: [
+                    userId ? { userId } : {},
+                    {
+                      permissions: {
+                        some: {
+                          type: 'user_group_post_view',
+                          OR: [
+                            { public: true },
+                            userId
+                              ? {
+                                  groups: {
+                                    some: {
+                                      group: {
+                                        users: {
+                                          some: {
+                                            userId,
+                                          },
+                                        },
+                                      },
+                                    },
+                                  },
+                                }
+                              : {},
+                          ],
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+            {
+              ports: {
+                some: {
+                  OR: [
+                    userId
+                      ? {
+                          hub: { userId },
+                        }
+                      : {},
+                    {
+                      open: true,
+                    },
+                    userId
+                      ? {
+                          groups: {
+                            some: {
+                              group: {
+                                users: {
+                                  some: {
+                                    userId,
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        }
+                      : {},
+                  ],
+                },
+              },
+            },
+          ],
+        },
+        select: {
+          id: true,
+          name: true,
+          tags: {
+            select: {
+              name: true,
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          _count: {
+            select: {
+              feeders: {
+                where: {
+                  OR: [
+                    userId ? { userId } : {},
+                    {
+                      permissions: {
+                        some: {
+                          type: 'user_group_post_view',
+                          OR: [
+                            { public: true },
+                            userId
+                              ? {
+                                  groups: {
+                                    some: {
+                                      group: {
+                                        users: {
+                                          some: {
+                                            userId,
+                                          },
+                                        },
+                                      },
+                                    },
+                                  },
+                                }
+                              : {},
+                          ],
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+              ports: {
+                where: {
+                  OR: [
+                    userId
+                      ? {
+                          hub: { userId },
+                        }
+                      : {},
+                    {
+                      open: true,
+                    },
+                    userId
+                      ? {
+                          groups: {
+                            some: {
+                              group: {
+                                users: {
+                                  some: {
+                                    userId,
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        }
+                      : {},
+                  ],
+                },
+              },
+            },
+          },
+        },
+      });
+    },
+
+    defaultFeeder: async (hubId: string) => {
+      return await this.db.feeder.findFirst({
+        where: {
+          hubId,
+          isDefault: true,
+        },
+        select: {
+          id: true,
         },
       });
     },

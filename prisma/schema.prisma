@@ -32,14 +32,9 @@ model user {
   storage       storage?
   hubs          hub[]
   feeders       feeder[]
-  rates         content_rate[]
   contents      content[]
-  posts         post[]
   images        user_image[]
-  likes         content_like[]
-  comments      content_comment[]
   shares        share[]
-  node_visits   node_visit[]
   createdGroups user_group[]
   joinedGroups  user_group_member[]
 }
@@ -66,7 +61,7 @@ model node {
   id String @id @default(uuid()) @db.Uuid
 
   type String
-  name String
+  name String @db.Citext
 
   position node_position?
 
@@ -82,10 +77,7 @@ model node {
   targetNodes node_connections[] @relation(name: "source_node")
   sourceNodes node_connections[] @relation(name: "target_node")
 
-  rates content_rate[]
-
   lastShareAt DateTime?
-  visits      node_visit[]
 
   config    node_config?
   locations node_location[]
@@ -109,20 +101,6 @@ model node_config {
   nodeId String @unique @db.Uuid
 
   data Json
-}
-
-model node_visit {
-  user user @relation(fields: [userId], references: [id], onDelete: Cascade)
-  node node @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-
-  userId String @db.Uuid
-  nodeId String @db.Uuid
-
-  visitCount Int @default(0)
-
-  lastVisitAt DateTime
-
-  @@unique([userId, nodeId])
 }
 
 model node_connections {
@@ -158,12 +136,20 @@ model feeder {
   inputNode  node? @relation(name: "input_node")
   outputNode node? @relation(name: "output_node")
 
-  stats        feeder_stats?
-  permissions  feeder_permission[]
-  createdPosts post[]
-  ports        port_feeder[]
+  stats       feeder_stats?
+  permissions feeder_permission[]
+  ports       port_feeder[]
+
+  tags feeder_tag[]
 
   @@unique([isDefault, hubId])
+}
+
+enum NotificationType {
+  SHARE_CREATED
+  SHARE_SHARED
+  SHARE_MOVED
+  SHARE_REMOVED
 }
 
 enum PermissionType {
@@ -178,8 +164,8 @@ enum PermissionType {
 model feeder_permission {
   id String @unique @default(uuid()) @db.Uuid
 
-  type PermissionType
-  open Boolean        @default(false)
+  type   PermissionType
+  public Boolean        @default(false)
 
   feeder   feeder @relation(fields: [feederId], references: [id], onDelete: Cascade)
   feederId String @db.Uuid
@@ -220,6 +206,7 @@ model hub {
   ports   port[]
   nodes   node[]
   groups  user_group[]
+  tags    hub_tag[]
 }
 
 enum PortMode {
@@ -237,7 +224,7 @@ model port {
 
   mode PortMode
 
-  open     Boolean @default(true)
+  open     Boolean @default(false)
   readonly Boolean @default(false)
 
   hubId String @db.Uuid
@@ -288,8 +275,6 @@ model user_group {
 
   name String @db.Citext
 
-  type String
-
   user   user   @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId String @db.Uuid
 
@@ -300,7 +285,42 @@ model user_group {
   port_group         port_group[]
   feeder_permissions feeder_permission_group[]
 
+  permissions     group_permission[]
+  permitted_group permitted_group[]
+
   @@unique([userId, hubId, name])
+}
+
+enum GroupPermissionType {
+  USER_JOIN
+  USER_SUBMIT
+  USER_ACCEPT
+  USER_REJECT
+  USER_INVITE
+}
+
+model group_permission {
+  id String @unique @default(uuid()) @db.Uuid
+
+  type   GroupPermissionType
+  public Boolean             @default(false)
+
+  groupId String     @db.Uuid
+  group   user_group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  groups permitted_group[]
+
+  @@unique([groupId, type])
+}
+
+model permitted_group {
+  permission   group_permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  permissionId String           @db.Uuid
+
+  group   user_group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  groupId String     @db.Uuid
+
+  @@unique([groupId, permissionId])
 }
 
 model user_group_member {
@@ -313,43 +333,17 @@ model user_group_member {
   @@id([groupId, userId])
 }
 
-model post {
-  id String @id @default(uuid()) @db.Uuid
-
-  userId String @db.Uuid
-  user   user   @relation(fields: [userId], references: [id])
-
-  message String?
-
-  creatorFeederId String @db.Uuid
-  creatorFeeder   feeder @relation(fields: [creatorFeederId], references: [id], onDelete: Cascade)
-
-  contentId String?  @db.Uuid
-  content   content? @relation(fields: [contentId], references: [id], onDelete: Cascade)
-
-  locationId String?   @db.Uuid
-  location   location? @relation(fields: [locationId], references: [id], onDelete: Cascade)
-
-  shares share[]
-
-  createdAt DateTime?
-}
-
 model share {
   id String @id @default(uuid()) @db.Uuid
 
-  user   user   @relation(fields: [userId], references: [id])
+  user   user   @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId String @db.Uuid
 
-  nodeLocationId String        @db.Uuid
-  nodeLocation   node_location @relation(fields: [nodeLocationId], references: [id], onDelete: Cascade)
+  content   content? @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  contentId String?  @db.Uuid
 
-  post   post?   @relation(fields: [postId], references: [id], onDelete: Cascade)
-  postId String? @db.Uuid
-
-  likes    content_like[]
-  comments content_comment[]
-  rates    content_rate[]
+  node_location   node_location? @relation(fields: [node_locationId], references: [id], onDelete: Cascade)
+  node_locationId String?        @db.Uuid
 
   sharedAt DateTime @default(now())
 }
@@ -367,128 +361,85 @@ model storage_stats {
   storage storage @relation(fields: [userId], references: [userId], onDelete: Cascade)
   userId  String  @unique @db.Uuid
 
-  capacity Int
-  used     Int
+  total Int @default(1000000000)
+  used  Int @default(0)
 }
 
 model location {
   id String @id @default(uuid()) @db.Uuid
 
-  userId  String?  @db.Uuid
-  storage storage? @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  userId  String  @db.Uuid
+  storage storage @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
   path String @db.Citext
 
-  label    location_label?
   contents content[]
-  post     post[]
 
   @@unique([userId, path])
-}
-
-model location_label {
-  description String
-  color       String
-  icon        String
-
-  locationId String   @unique @db.Uuid
-  location   location @relation(fields: [locationId], references: [id], onDelete: Cascade)
 }
 
 model tag {
   name        String        @unique
   content_tag content_tag[]
+  hub_tag     hub_tag[]
+  feeder_tag  feeder_tag[]
+}
+
+model hub_tag {
+  hub hub @relation(fields: [hubId], references: [id])
+  tag tag @relation(fields: [name], references: [name])
+
+  hubId String @db.Uuid
+  name  String
+
+  @@unique([name, hubId])
+}
+
+model feeder_tag {
+  feeder feeder @relation(fields: [feederId], references: [id], onDelete: Cascade)
+  tag    tag    @relation(fields: [name], references: [name], onDelete: Cascade)
+
+  feederId String @db.Uuid
+  name     String
+
+  @@unique([name, feederId])
 }
 
 model content {
   id String @id @default(uuid()) @db.Uuid
 
-  name String @db.Citext
-  type String
-
   userId String @db.Uuid
   user   user   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name String @db.Citext
+  type String
 
   label      content_label?
   properties content_properties?
   tags       content_tag[]
 
-  sourceContents  related_contents[] @relation(name: "source_content")
-  relatedContents related_contents[] @relation(name: "related_content")
-
   location   location @relation(fields: [locationId], references: [id], onDelete: Cascade)
   locationId String   @db.Uuid
 
-  file file?
-
-  posts post[]
-
-  rates    content_rate[]
-  likes    content_like[]
-  comments content_comment[]
-
-  interactions content_interactions?
+  files content_file[]
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  share     share[]
 
   @@unique([locationId, name])
 }
 
-model content_rate {
-  rate Int
-
-  userId String @db.Uuid
-  user   user   @relation(fields: [userId], references: [id])
-
-  shareId String @db.Uuid
-  share   share  @relation(fields: [shareId], references: [id], onDelete: Cascade)
-
-  nodeId String @db.Uuid
-  node   node   @relation(fields: [nodeId], references: [id], onDelete: Cascade)
-
+model content_file {
+  content   content @relation(fields: [contentId], references: [id], onDelete: Cascade)
   contentId String  @db.Uuid
-  content   content @relation(fields: [contentId], references: [id])
 
-  @@unique([shareId, userId, nodeId])
-}
+  file   file   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  fileId String @db.Uuid
 
-model content_like {
-  userId String @db.Uuid
-  user   user   @relation(fields: [userId], references: [id])
+  type String
 
-  shareId String @db.Uuid
-  share   share  @relation(fields: [shareId], references: [id], onDelete: Cascade)
-
-  contentId String  @db.Uuid
-  content   content @relation(fields: [contentId], references: [id])
-
-  @@unique([shareId, userId])
-}
-
-model content_comment {
-  id String @id @default(uuid()) @db.Uuid
-
-  userId String @db.Uuid
-  user   user   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  shareId String @db.Uuid
-  share   share  @relation(fields: [shareId], references: [id], onDelete: Cascade)
-
-  contentId String  @db.Uuid
-  content   content @relation(fields: [contentId], references: [id])
-
-  time Int?   @default(0)
-  text String
-}
-
-model related_contents {
-  sourceContentId String  @db.Uuid
-  sourceContent   content @relation(name: "related_content", fields: [sourceContentId], references: [id], onDelete: Cascade)
-
-  relatedContentId String  @db.Uuid
-  relatedContent   content @relation(name: "source_content", fields: [relatedContentId], references: [id], onDelete: Cascade)
-
-  @@unique([sourceContentId, relatedContentId])
+  @@unique([contentId, fileId])
 }
 
 model content_tag {
@@ -505,7 +456,7 @@ model content_properties {
   content   content @relation(fields: [contentId], references: [id], onDelete: Cascade)
   contentId String  @unique @db.Uuid
 
-  properties Json
+  json Json
 }
 
 model content_label {
@@ -515,47 +466,58 @@ model content_label {
   contentId String  @unique @db.Uuid
 }
 
-model content_interactions {
-  content   content @relation(fields: [contentId], references: [id], onDelete: Cascade)
-  contentId String  @unique @db.Uuid
-
-  plays    Int @default(0)
-  likes    Int @default(0)
-  comments Int @default(0)
-  rates    Int @default(0)
-  feeders  Int @default(0)
+enum FileType {
+  AUDIO
+  VIDEO
+  IMAGE
+  TEXT
+  OTHER
 }
 
 model file {
   id String @id @default(uuid()) @db.Uuid
 
+  type FileType
+
   size         Int
   originalName String
-  duration     Int
 
   url         String
   urlOriginal String
 
-  waveform   waveform?
+  waveform  waveform?
+  thumbnail thumbnail?
+
   properties file_properties?
 
   userId  String  @db.Uuid
   storage storage @relation(fields: [userId], references: [userId])
 
-  contentId String?  @unique @db.Uuid
-  content   content? @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  contents content_file[]
 }
 
 model file_properties {
   fileId String @unique @db.Uuid
   file   file   @relation(fields: [fileId], references: [id], onDelete: Cascade)
 
-  loudness Float?
-  peak     Float?
-  channels Int?
+  duration   Int?
+  sampleRate Int?
+  format     String?
+  codec      String?
+  bitDepth   Int?
+  channels   Int?
+  loudness   Float?
+  peak       Float?
 }
 
 model waveform {
+  fileId String @unique @db.Uuid
+  file   file   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  data Bytes
+}
+
+model thumbnail {
   fileId String @unique @db.Uuid
   file   file   @relation(fields: [fileId], references: [id], onDelete: Cascade)
 

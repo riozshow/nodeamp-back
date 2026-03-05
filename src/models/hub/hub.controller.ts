@@ -11,9 +11,17 @@ import {
   Patch,
   Query,
   BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { AuthenticatedGuard } from 'src/auth/authenticated.guard';
-import { NewPortDTO, RouterUpdate, UpdateGatewayDTO } from './hub.dto';
+import {
+  NewGroupDTO,
+  NewHubDTO,
+  NewPortDTO,
+  RouterUpdate,
+  UpdateGatewayDTO,
+  UpdateGroupDTO,
+} from './hub.dto';
 import { HubGuard } from 'src/auth/hub.guard';
 import { HubRouter } from './hub.router';
 import { HubRepository } from './hub.repository';
@@ -22,6 +30,7 @@ import { HubProcesses } from './hub.processes';
 import { FeederDataDTO } from '../feeder/feeder.dto';
 import { NODE_MODELS } from '../node/node.models';
 import { HubGateway } from './hub.gateway';
+import { HubGroups } from './hub.groups';
 
 @Controller('hubs')
 export class HubController {
@@ -30,7 +39,24 @@ export class HubController {
     private gateway: HubGateway,
     private repository: HubRepository,
     private processes: HubProcesses,
+    private groups: HubGroups,
   ) {}
+
+  @Get()
+  async getHubs(@Session() session: SessionType) {
+    const requestUserId = session.passport?.user.id;
+    return await this.repository.get.many(requestUserId);
+  }
+
+  @UseGuards(AuthenticatedGuard)
+  @Post()
+  async createHub(@Session() session: SessionType, @Body() body: NewHubDTO) {
+    const requestUserId = session.passport?.user.id;
+    const hub = await this.repository.create.one(requestUserId, body.name);
+    if (hub) {
+      return await this.repository.get.oneFromList(hub.id, requestUserId);
+    }
+  }
 
   @Get(':hubId')
   async getHubData(
@@ -39,6 +65,20 @@ export class HubController {
   ) {
     const requestUserId = session.passport?.user.id;
     return await this.repository.get.one(hubId, requestUserId);
+  }
+
+  @Get(':hubId/user')
+  async getHubOwner(
+    @Param('hubId') hubId: string,
+    @Session() session: SessionType,
+  ) {
+    const requestUserId = session.passport?.user.id;
+    return await this.repository.get.owner(hubId, requestUserId);
+  }
+
+  @Get(':hubId/default-feeder')
+  async getDefaultFeeder(@Param('hubId') hubId: string) {
+    return await this.repository.get.defaultFeeder(hubId);
   }
 
   @UseGuards(AuthenticatedGuard)
@@ -140,6 +180,71 @@ export class HubController {
 
   @UseGuards(new HubGuard({ hubId: 'hubId' }))
   @UseGuards(AuthenticatedGuard)
+  @Get(':hubId/groups')
+  async getGroups(
+    @Session() session: SessionType,
+    @Param('hubId') hubId: string,
+  ) {
+    if (!session.passport?.user.id) throw new NotFoundException();
+    const userId = session.passport.user.id;
+    return await this.groups.getData(hubId, userId);
+  }
+
+  @UseGuards(new HubGuard({ hubId: 'hubId' }))
+  @UseGuards(AuthenticatedGuard)
+  @Get(':hubId/groups/:groupId/permissions')
+  async getGroupPermissions(
+    @Session() session: SessionType,
+    @Param('hubId') hubId: string,
+    @Param('groupId') groupId: string,
+  ) {
+    if (!session.passport?.user.id) throw new NotFoundException();
+    const userId = session.passport.user.id;
+    return await this.groups.getGroupPermissions(hubId, userId, groupId);
+  }
+
+  @UseGuards(new HubGuard({ hubId: 'hubId' }))
+  @UseGuards(AuthenticatedGuard)
+  @Post(':hubId/groups')
+  async createGroup(
+    @Session() session: SessionType,
+    @Param('hubId') hubId: string,
+    @Body() data: NewGroupDTO,
+  ) {
+    if (!session.passport?.user.id) throw new NotFoundException();
+    const userId = session.passport.user.id;
+    return await this.groups.createGroup(hubId, userId, data);
+  }
+
+  @UseGuards(new HubGuard({ hubId: 'hubId' }))
+  @UseGuards(AuthenticatedGuard)
+  @Patch(':hubId/groups/:groupId')
+  async updateGroup(
+    @Session() session: SessionType,
+    @Param('hubId') hubId: string,
+    @Param('groupId') groupId: string,
+    @Body() body: UpdateGroupDTO,
+  ) {
+    if (!session.passport?.user.id) throw new NotFoundException();
+    const userId = session.passport.user.id;
+    return await this.groups.update(groupId, hubId, userId, body);
+  }
+
+  @UseGuards(new HubGuard({ hubId: 'hubId' }))
+  @UseGuards(AuthenticatedGuard)
+  @Delete(':hubId/groups/:groupId')
+  async deleteGroup(
+    @Session() session: SessionType,
+    @Param('hubId') hubId: string,
+    @Param('groupId') groupId: string,
+  ) {
+    if (!session.passport?.user.id) throw new NotFoundException();
+    const userId = session.passport.user.id;
+    return await this.groups.deleteGroup(groupId, hubId, userId);
+  }
+
+  @UseGuards(new HubGuard({ hubId: 'hubId' }))
+  @UseGuards(AuthenticatedGuard)
   @Patch(':hubId/settings/routing')
   async updateRouter(
     @Session() session: SessionType,
@@ -225,20 +330,92 @@ export class HubController {
 
   @UseGuards(new HubGuard({ hubId: 'hubId' }))
   @UseGuards(AuthenticatedGuard)
-  @Post(':hubId/ports/:recieverPortId/subscriptions/:senderPortId')
-  async subscribePort(
+  @Post(':hubId/ports/:userPortId/inputs/:hubPortId')
+  async connectOutputPort(
     @Session() session: SessionType,
     @Param('hubId') hubId: string,
-    @Param('recieverPortId') recieverPortId: string,
-    @Param('senderPortId') senderPortId: string,
+    @Param('userPortId') userPortId: string,
+    @Param('hubPortId') hubPortId: string,
   ) {
     if (!session.passport?.user.id) throw new NotFoundException();
     const userId = session.passport.user.id;
-    return await this.gateway.subscribePort(
+    return await this.gateway.connectOutputPort(
       hubId,
       userId,
-      recieverPortId,
-      senderPortId,
+      userPortId,
+      hubPortId,
     );
+  }
+
+  @UseGuards(new HubGuard({ hubId: 'hubId' }))
+  @UseGuards(AuthenticatedGuard)
+  @Post(':hubId/ports/:userPortId/outputs/:hubPortId')
+  async connectInputPort(
+    @Session() session: SessionType,
+    @Param('hubId') hubId: string,
+    @Param('userPortId') userPortId: string,
+    @Param('hubPortId') hubPortId: string,
+  ) {
+    if (!session.passport?.user.id) throw new NotFoundException();
+    const userId = session.passport.user.id;
+    return await this.gateway.connectInputPort(
+      hubId,
+      userId,
+      userPortId,
+      hubPortId,
+    );
+  }
+
+  @UseGuards(new HubGuard({ hubId: 'hubId' }))
+  @UseGuards(AuthenticatedGuard)
+  @Delete(':hubId/ports/:userPortId/inputs/:hubPortId')
+  async disconnectOutputPort(
+    @Session() session: SessionType,
+    @Param('hubId') hubId: string,
+    @Param('userPortId') userPortId: string,
+    @Param('hubPortId') hubPortId: string,
+  ) {
+    if (!session.passport?.user.id) throw new NotFoundException();
+    const userId = session.passport.user.id;
+    return await this.gateway.disconnectOutputPort(
+      hubId,
+      userId,
+      userPortId,
+      hubPortId,
+    );
+  }
+
+  @UseGuards(new HubGuard({ hubId: 'hubId' }))
+  @UseGuards(AuthenticatedGuard)
+  @Delete(':hubId/ports/:userPortId/outputs/:hubPortId')
+  async disconnectInputPort(
+    @Session() session: SessionType,
+    @Param('hubId') hubId: string,
+    @Param('userPortId') userPortId: string,
+    @Param('hubPortId') hubPortId: string,
+  ) {
+    if (!session.passport?.user.id) throw new NotFoundException();
+    const userId = session.passport.user.id;
+    return await this.gateway.disconnectInputPort(
+      hubId,
+      userId,
+      userPortId,
+      hubPortId,
+    );
+  }
+
+  @UseGuards(new HubGuard({ hubId: 'hubId' }))
+  @UseGuards(AuthenticatedGuard)
+  @Patch(':hubId/feeders/:feederId/default')
+  async setAsDefault(
+    @Param('feederId') feederId: string,
+    @Param('hubId') hubId: string,
+    @Session() session: SessionType,
+  ) {
+    const requestUserId = session.passport?.user.id;
+    if (requestUserId) {
+      return await this.router.setDefaultFeeder(hubId, requestUserId, feederId);
+    }
+    throw new UnauthorizedException();
   }
 }

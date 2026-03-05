@@ -36,8 +36,8 @@ export class StorageProcesses {
     });
 
     if (storage_stats) {
-      const { capacity, used } = storage_stats;
-      return capacity - used - size > 0;
+      const { total, used } = storage_stats;
+      return total - used - size > 0;
     }
 
     return false;

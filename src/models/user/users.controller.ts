@@ -9,4 +9,9 @@ export class UserController {
   async getUserPage(@Param('userId') userId: string) {
     return await this.repository.get.profilePage(userId);
   }
+
+  @Get(':userId/default-hub')
+  async getDefaultHub(@Param('userId') userId: string) {
+    return await this.repository.get.defaultHub(userId);
+  }
 }

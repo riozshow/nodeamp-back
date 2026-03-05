@@ -5,7 +5,7 @@ import { GroupsRepository } from '../groups/groups.repository';
 
 export type PermissionsConfig = {
   type: PermissionType;
-  open?: boolean;
+  public?: boolean;
   groups?: { groupId: string }[];
 }[];
 
@@ -20,12 +20,12 @@ export class FeederPermissions {
     [key: string]: PermissionsConfig;
   } = {
     PUBLIC: [
-      { type: 'user_group_post_view', open: true },
-      { type: 'user_group_post_share', open: true },
-      { type: 'user_group_post_comment', open: true },
-      { type: 'user_group_post_create', open: false },
-      { type: 'user_group_post_remove', open: false },
-      { type: 'user_group_post_rate', open: false },
+      { type: 'user_group_post_view', public: true },
+      { type: 'user_group_post_share', public: true },
+      { type: 'user_group_post_comment', public: true },
+      { type: 'user_group_post_create', public: false },
+      { type: 'user_group_post_remove', public: false },
+      { type: 'user_group_post_rate', public: false },
     ],
   };
 
@@ -35,7 +35,7 @@ export class FeederPermissions {
         feederId,
         OR: [
           {
-            open: true,
+            public: true,
           },
           ...(reqestUserId
             ? [
@@ -94,7 +94,7 @@ export class FeederPermissions {
           },
         },
         update: {
-          open: permission.open,
+          public: permission.public,
           ...(permission.groups
             ? {
                 groups: {
@@ -110,7 +110,7 @@ export class FeederPermissions {
             : {}),
         },
         create: {
-          open: permission.open,
+          public: permission.public,
           type: permission.type,
           feeder: {
             connect: {

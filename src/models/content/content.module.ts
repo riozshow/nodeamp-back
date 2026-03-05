@@ -1,7 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { ContentController } from './content.controller';
+import { ContentController } from './_content.controller';
 import { DbModule } from 'src/db/db.module';
-import { ContentUpdater } from './content.updater';
+import { ContentUpdater } from './_content.updater';
 import { AudioModule } from 'src/models/audio/audio.module';
 import { StorageModule } from 'src/models/storage/storage.module';
 import { ContentProcesses } from './content.processes';

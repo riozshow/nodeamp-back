@@ -3,7 +3,7 @@ import { DbService } from 'src/db/db.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ContentProcesses } from './content.processes';
 import { file } from '@prisma/client';
-import { ContentUpdater } from './content.updater';
+import { ContentUpdater } from './_content.updater';
 import { ContentUpdateDTO } from './content.dto';
 import { EVENTS } from 'src/events/events.names';
 

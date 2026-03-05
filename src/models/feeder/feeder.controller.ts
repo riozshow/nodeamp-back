@@ -25,6 +25,7 @@ import { SessionType } from 'src/auth/auth.types';
 import { FeederDataDTO } from './feeder.dto';
 import { NodeDisplay } from '../node/node.display';
 import { NodeCreator } from '../node/node.creator';
+import { FeederNotifications } from './feeder.notifications';
 
 @Controller('feeders')
 export class FeederController {
@@ -33,11 +34,12 @@ export class FeederController {
     private nodeDisplay: NodeDisplay,
     private nodeCreator: NodeCreator,
     private repository: FeederRepository,
+    private notifications: FeederNotifications,
   ) {}
 
   @UseGuards(new GroupGuard({ feederId: 'feederId' }, FeederActions.view))
-  @Get(':feederId/details')
-  async getDetails(
+  @Get(':feederId')
+  async getFeeder(
     @Param('feederId') feederId: string,
     @Session() session: SessionType,
   ) {
@@ -50,6 +52,7 @@ export class FeederController {
   async getShares(
     @Param('feederId') feederId: string,
     @Query('path') path: string,
+    @Query('loadLast') loadLast: string,
     @Session() session: SessionType,
   ) {
     const requestUserId = session.passport?.user.id;
@@ -59,7 +62,15 @@ export class FeederController {
       const { select, take, orderBy } = await this.nodeDisplay.getSelect({
         requestUserId,
         node,
+        loadLast: !!loadLast,
       });
+
+      if (requestUserId) {
+        await this.notifications.removeFeederNotifications(
+          feederId,
+          requestUserId,
+        );
+      }
 
       return await this.shareRepository.get.byFeederId({
         feederId,

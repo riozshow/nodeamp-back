@@ -14,7 +14,7 @@ import {
 import { AuthenticatedGuard } from 'src/auth/authenticated.guard';
 import { ContentPatchDTO, ContentUpdateDTO } from './content.dto';
 import { SessionType } from 'src/auth/auth.types';
-import { StorageRepository } from 'src/models/storage/storage.repository';
+import { StorageRepository } from 'src/models/storage/storage.service';
 import { ContentRepository } from './content.repository';
 
 @Controller('contents')

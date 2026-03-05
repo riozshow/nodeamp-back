@@ -22,6 +22,12 @@ export class PostRepository {
             name: true,
           },
         },
+        hub: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     },
     user: {

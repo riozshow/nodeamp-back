@@ -75,7 +75,7 @@ export class NodeProcesses {
         const availableRoutes = ratingRoutes.slice(0, rate.rate - 1);
         if (availableRoutes.length) {
           const targetNodeIds = node.targetNodes.map((t) => t.targetNodeId);
-          for (let i = availableRoutes.length - 1; i > 0; i--) {
+          for (let i = availableRoutes.length - 1; i >= 0; i--) {
             if (targetNodeIds.includes(availableRoutes[i])) {
               return availableRoutes[i];
             }

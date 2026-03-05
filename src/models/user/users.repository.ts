@@ -1,8 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DbService } from 'src/db/db.service';
 import { CreateUserDTO, UpdateUser } from './users.dto';
-import { EventEmitter2 } from '@nestjs/event-emitter';
-import { StorageRepository } from 'src/models/storage/storage.repository';
+import { StorageRepository } from 'src/models/storage/storage.service';
 import { HubRepository } from 'src/models/hub/hub.repository';
 import { UsersProcesses } from './users.processes';
 
@@ -48,12 +47,10 @@ export class UsersRepository {
               id: true,
               name: true,
               ports: {
-                where: {
-                  mode: 'RECIEVE',
-                },
                 select: {
                   id: true,
                   name: true,
+                  mode: true,
                 },
               },
             },
@@ -77,6 +74,17 @@ export class UsersRepository {
               isDefault: true,
             },
           },
+        },
+      });
+    },
+    defaultHub: async (userId: string) => {
+      return this.db.hub.findFirst({
+        where: {
+          userId,
+          isDefault: true,
+        },
+        select: {
+          id: true,
         },
       });
     },

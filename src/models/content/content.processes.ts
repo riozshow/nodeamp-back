@@ -3,7 +3,7 @@ import { DbService } from 'src/db/db.service';
 import { BadRequestException } from '@nestjs/common';
 import { capitalize } from 'src/utils/capitalize';
 import { getDuplicateSufix } from 'src/utils/getDuplicateSufix';
-import { StorageRepository } from 'src/models/storage/storage.repository';
+import { StorageRepository } from 'src/models/storage/storage.service';
 
 @Injectable()
 export class ContentProcesses {

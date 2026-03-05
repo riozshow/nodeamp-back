@@ -25,7 +25,13 @@ export class ShareRepository {
       this.eventEmitter.emit(EVENTS.SHARES.REMOVE, share),
     reject: (share: share) =>
       this.eventEmitter.emit(EVENTS.SHARES.REJECT, share),
-    move: (share: share) => this.eventEmitter.emit(EVENTS.SHARES.MOVE, share),
+    move: (share: share, oldFeederId?: string) => {
+      this.eventEmitter.emit(EVENTS.SHARES.MOVE, share);
+      oldFeederId &&
+        this.eventEmitter.emit(EVENTS.FEEDERS.TAG_REFRESH, {
+          feederId: oldFeederId,
+        });
+    },
     rate: (rate: content_rate) =>
       this.eventEmitter.emit(EVENTS.SHARES.RATE, rate),
   };
@@ -59,6 +65,23 @@ export class ShareRepository {
   public update = {
     pin: async (shareId: string) => {},
     moveTo: async (shareId: string, nodeId: string) => {
+      const oldFeeder = await this.db.feeder.findFirst({
+        where: {
+          outputNode: {
+            locations: {
+              some: {
+                shares: {
+                  some: {
+                    id: shareId,
+                  },
+                },
+              },
+            },
+          },
+        },
+        select: { id: true },
+      });
+
       const share = await this.db.share.update({
         where: { id: shareId },
         data: {
@@ -73,7 +96,8 @@ export class ShareRepository {
           sharedAt: getCurrentDate(),
         },
       });
-      this.emit.move(share);
+
+      this.emit.move(share, oldFeeder?.id);
       return share;
     },
     rate: async (

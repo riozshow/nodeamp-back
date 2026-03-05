@@ -21,7 +21,6 @@ export class NodeEvents {
         where: {
           userId: { not: skipUserId },
           group: {
-            type: 'subscriptions',
             hub: {
               nodes: {
                 every: {

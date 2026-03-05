@@ -8,6 +8,7 @@ import { FeederProcesses } from './feeder.processes';
 import { ShareModule } from '../share/share.module';
 import { ContentModule } from '../content/content.module';
 import { GroupsModule } from '../groups/groups.module';
+import { FeederNotifications } from './feeder.notifications';
 
 @Module({
   imports: [
@@ -18,7 +19,12 @@ import { GroupsModule } from '../groups/groups.module';
     GroupsModule,
   ],
   exports: [FeederRepository, FeederPermissions, FeederProcesses],
-  providers: [FeederPermissions, FeederRepository, FeederProcesses],
+  providers: [
+    FeederPermissions,
+    FeederRepository,
+    FeederProcesses,
+    FeederNotifications,
+  ],
   controllers: [FeederController],
 })
 export class FeederModule {}

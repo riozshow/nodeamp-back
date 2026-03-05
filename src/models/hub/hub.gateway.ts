@@ -130,11 +130,9 @@ export class HubGateway {
           },
         },
         groups: {
-          where: { type: { not: 'blocked' } },
           select: {
             id: true,
             name: true,
-            type: true,
           },
         },
       },
@@ -187,11 +185,11 @@ export class HubGateway {
     });
   }
 
-  async subscribePort(
+  async connectOutputPort(
     hubId: string,
     userId: string,
-    recieverPortId: string,
-    senderPortId: string,
+    userPortId: string,
+    hubPortId: string,
   ) {
     return await this.db.port_subscriptions.create({
       data: {
@@ -201,12 +199,12 @@ export class HubGateway {
               id: hubId,
               userId,
             },
-            id: recieverPortId,
+            id: userPortId,
           },
         },
         senderPort: {
           connect: {
-            id: senderPortId,
+            id: hubPortId,
             OR: [
               { open: true },
               {
@@ -220,6 +218,96 @@ export class HubGateway {
               },
             ],
           },
+        },
+      },
+    });
+  }
+
+  async connectInputPort(
+    hubId: string,
+    userId: string,
+    userPortId: string,
+    hubPortId: string,
+  ) {
+    return await this.db.port_subscriptions.create({
+      data: {
+        senderPort: {
+          connect: {
+            hub: {
+              id: hubId,
+              userId,
+            },
+            id: userPortId,
+          },
+        },
+        recieverPort: {
+          connect: {
+            id: hubPortId,
+            OR: [
+              { open: true },
+              {
+                groups: {
+                  some: {
+                    group: {
+                      userId,
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        },
+      },
+    });
+  }
+
+  async disconnectOutputPort(
+    hubId: string,
+    userId: string,
+    userPortId: string,
+    hubPortId: string,
+  ) {
+    return await this.db.port_subscriptions.delete({
+      where: {
+        recieverPortId_senderPortId: {
+          recieverPortId: userPortId,
+          senderPortId: hubPortId,
+        },
+        recieverPort: {
+          hub: {
+            id: hubId,
+            userId,
+          },
+          id: userPortId,
+        },
+        senderPort: {
+          id: hubPortId,
+        },
+      },
+    });
+  }
+
+  async disconnectInputPort(
+    hubId: string,
+    userId: string,
+    userPortId: string,
+    hubPortId: string,
+  ) {
+    return await this.db.port_subscriptions.delete({
+      where: {
+        recieverPortId_senderPortId: {
+          senderPortId: userPortId,
+          recieverPortId: hubPortId,
+        },
+        senderPort: {
+          hub: {
+            id: hubId,
+            userId,
+          },
+          id: userPortId,
+        },
+        recieverPort: {
+          id: hubPortId,
         },
       },
     });

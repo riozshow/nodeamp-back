@@ -12,9 +12,11 @@ export const EVENTS = {
     MOVE: 'share.move',
   },
   FEEDERS: {
+    LOAD: 'feeder.load',
     CREATE: 'feeder.create',
     UPDATE: 'feeder.update',
     REMOVE: 'feeder.remove',
+    TAG_REFRESH: 'feeder.tag_refresh',
   },
   STORAGE: {
     UPDATE: 'storage.update',
@@ -27,5 +29,10 @@ export const EVENTS = {
   },
   POSTS: {
     REMOVE: 'post.removed',
+  },
+  CONTENT: {
+    UPDATE: {
+      TAGS: 'content.updated.tags',
+    },
   },
 };

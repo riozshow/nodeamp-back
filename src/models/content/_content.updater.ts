@@ -3,6 +3,7 @@ import { ContentUpdateDTO } from './content.dto';
 import { DbService } from 'src/db/db.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ContentRepository } from './content.repository';
+import { EVENTS } from 'src/events/events.names';
 
 @Injectable()
 export class ContentUpdater {
@@ -10,6 +11,13 @@ export class ContentUpdater {
     private db: DbService,
     private eventEmitter: EventEmitter2,
   ) {}
+
+  private emit = {
+    update: {
+      tags: (id: string) =>
+        this.eventEmitter.emit(EVENTS.CONTENT.UPDATE.TAGS, id),
+    },
+  };
 
   async update(userId: string, content: ContentUpdateDTO) {
     const isExist = await this.db.content.findUnique({
@@ -22,6 +30,7 @@ export class ContentUpdater {
 
     if (content.tags) {
       await this.handleContentTagsData(content);
+      this.emit.update.tags(content.id);
     }
 
     if (content.relatedContents) {
@@ -54,7 +63,7 @@ export class ContentUpdater {
 
   getContentUpdateObject(content: ContentUpdateDTO) {
     return {
-      name: content.name,
+      ...(content.name ? { name: content.name } : {}),
     };
   }
 
